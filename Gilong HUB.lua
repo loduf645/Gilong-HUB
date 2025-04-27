@@ -10,8 +10,6 @@ startButton.Parent = screenGui
 screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
 local function startAutoFarm()
-    print("Auto Farm Dimulai!")
-    
     while true do
         print("Mengambil bond...")
         wait(5)
@@ -23,4 +21,10 @@ startButton.MouseButton1Click:Connect(function()
     startButton.Text = "Auto Farm Running"
     startButton.TextColor3 = Color3.fromRGB(0, 255, 0)
 end)
+
+game.StarterGui:SetCore("SendNotification", {
+    Title = "Gilong HUB Loaded!";
+    Text = "Script berhasil dijalankan!";
+    Duration = 5;
+})
 ```
