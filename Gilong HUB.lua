@@ -1,6 +1,6 @@
--- QUANTUM GENERATOR SKILLCHECK V4.0
--- © RianModss - Specifically for Violence District Generators
--- UI bisa digeser + auto perfect untuk generator skillcheck
+-- QUANTUM VARIABLE HITBOX V6.0
+-- © RianModss - Hitbox with distance control (up to 100+ studs)
+-- UI dengan slider buat atur ukuran hitbox
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -8,513 +8,582 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
--- Configuration
+-- Configuration dengan distance control
 local CONFIG = {
     ENABLED = true,
-    AUTO_ENABLE = true,
-    GENERATOR_MODE = true, -- Fokus khusus generator
-    PERFECT_MODE = true,
-    REACTION_TIME = 0.01,
-    DEBUG_MODE = false,
-    SOUND_ENABLED = true,
-    NOTIFICATIONS = true,
-    UI_DRAGGABLE = true, -- UI bisa digeser
-}
-
--- Generator skillcheck specific patterns
-local GENERATOR_PATTERNS = {
-    "Generator",
-    "Gen",
-    "Power",
-    "Engine",
-    "Repair",
-    "Fix",
-    "Start",
-    "Activate",
-    "Charge",
-    "Energy",
-    "Progress",
-    "BarFill",
-    "Meter",
-    "Gauge",
-}
-
--- Colors khusus generator UI
-local GENERATOR_COLORS = {
-    Color3.fromRGB(0, 255, 0),    -- Green (zone perfect)
-    Color3.fromRGB(255, 200, 0),  -- Orange (generator color)
-    Color3.fromRGB(100, 200, 255),-- Blue (generator UI)
-    Color3.fromRGB(255, 100, 100),-- Red (danger zone)
+    AUTO_ATTACH = true,
+    HITBOX_SIZE = 50, -- Default size (bisa diubah pake slider)
+    MAX_DISTANCE = 100, -- Maximum hit distance
+    MIN_DISTANCE = 10, -- Minimum hit distance
+    CURRENT_DISTANCE = 50, -- Current hit distance
+    AUTO_HIT = true, -- Auto hit targets dalam range
+    SHOW_VISUAL = true, -- Tampilkan visual hitbox
+    TEAM_CHECK = false, -- True = hanya musuh
+    DAMAGE_MULTIPLIER = 2.0, -- Damage multiplier
+    KNOCKBACK_POWER = 50, -- Power knockback
+    UPDATE_RATE = 0.1, -- Update rate in seconds
 }
 
 -- Storage
-local activeSkillchecks = {}
-local generatorObjects = {}
-local isUIdragging = false
-local dragStartPosition = nil
-local UI_OFFSET = UDim2.new(0, 10, 0, 10)
-local skillcheckCount = 0
-local perfectCount = 0
+local hitboxInstances = {}
+local activeHitboxes = {}
+local targetList = {}
+local hitboxVisuals = {}
 
--- Quantum Generator Detector
-function detectGeneratorSkillcheck()
-    if not CONFIG.ENABLED then return end
+-- Quantum Hitbox Creator dengan distance control
+function createVariableHitbox(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    if hitboxInstances[tool] then return end
     
-    -- Cari generator di workspace
-    for _, obj in pairs(workspace:GetDescendants()) do
-        local objName = string.lower(obj.Name)
-        for _, pattern in pairs(GENERATOR_PATTERNS) do
-            if string.find(objName, string.lower(pattern)) then
-                if not generatorObjects[obj] then
-                    registerGenerator(obj)
-                end
-            end
-        end
+    local handle = tool:FindFirstChild("Handle")
+    if not handle then return end
+    
+    -- Hitbox part utama
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "QuantumHitbox_" .. tool.Name
+    hitbox.Size = Vector3.new(CONFIG.CURRENT_DISTANCE, CONFIG.CURRENT_DISTANCE, CONFIG.CURRENT_DISTANCE)
+    hitbox.Transparency = CONFIG.SHOW_VISUAL and 0.3 or 1
+    hitbox.Color = Color3.fromRGB(255, 0, 0)
+    hitbox.CanCollide = false
+    hitbox.Anchored = false
+    hitbox.Massless = true
+    hitbox.Parent = tool
+    
+    -- Weld ke handle tool
+    local weld = Instance.new("Weld")
+    weld.Part0 = handle
+    weld.Part1 = hitbox
+    weld.C0 = CFrame.new(0, 0, 0)
+    weld.Parent = hitbox
+    
+    -- Touch detection dengan distance check
+    hitbox.Touched:Connect(function(hit)
+        if not CONFIG.ENABLED then return end
         
-        -- Cek kalo ada part generator (biasanya warna orange/merah)
-        if obj:IsA("Part") or obj:IsA("MeshPart") then
-            if obj.Color then
-                for _, genColor in pairs(GENERATOR_COLORS) do
-                    if colorsSimilar(obj.Color, genColor, 0.2) then
-                        if not generatorObjects[obj] then
-                            registerGenerator(obj)
+        local humanoid = hit.Parent:FindFirstChild("Humanoid")
+        local rootPart = hit.Parent:FindFirstChild("HumanoidRootPart")
+        
+        if humanoid and rootPart and hit.Parent ~= LocalPlayer.Character then
+            -- Distance check
+            local playerRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if playerRoot then
+                local distance = (rootPart.Position - playerRoot.Position).Magnitude
+                
+                if distance <= CONFIG.CURRENT_DISTANCE then
+                    -- Team check
+                    if CONFIG.TEAM_CHECK then
+                        local targetPlayer = Players:GetPlayerFromCharacter(hit.Parent)
+                        if targetPlayer and LocalPlayer.Team and targetPlayer.Team then
+                            if LocalPlayer.Team == targetPlayer.Team then
+                                return -- Skip teammate
+                            end
                         end
                     end
+                    
+                    -- Apply damage dengan multiplier
+                    local damage = humanoid.MaxHealth * 0.1 * CONFIG.DAMAGE_MULTIPLIER
+                    humanoid:TakeDamage(damage)
+                    
+                    -- Apply knockback
+                    if CONFIG.KNOCKBACK_POWER > 0 then
+                        local knockback = Instance.new("BodyVelocity")
+                        knockback.Velocity = (rootPart.Position - playerRoot.Position).Unit * CONFIG.KNOCKBACK_POWER
+                        knockback.MaxForce = Vector3.new(10000, 10000, 10000)
+                        knockback.P = 10000
+                        knockback.Parent = rootPart
+                        game:GetService("Debris"):AddItem(knockback, 0.2)
+                    end
+                    
+                    -- Add to target list
+                    targetList[hit.Parent] = {
+                        lastHit = tick(),
+                        hitCount = (targetList[hit.Parent] and targetList[hit.Parent].hitCount or 0) + 1
+                    }
+                    
+                    -- Visual feedback
+                    createHitEffect(rootPart.Position)
                 end
             end
         end
+    end)
+    
+    hitboxInstances[tool] = {
+        hitbox = hitbox,
+        weld = weld,
+        tool = tool
+    }
+    
+    -- Visual hitbox sphere (jika enabled)
+    if CONFIG.SHOW_VISUAL then
+        createHitboxVisual(tool, hitbox)
     end
     
-    -- Deteksi UI generator skillcheck
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _, guiObject in pairs(playerGui:GetDescendants()) do
-            if guiObject:IsA("Frame") or guiObject:IsA("ImageLabel") then
-                local objName = string.lower(guiObject.Name)
-                local objText = guiObject:FindFirstChild("TextLabel") and 
-                               string.lower(guiObject.TextLabel.Text or "") or ""
+    return hitbox
+end
+
+-- Buat visual hitbox sphere
+function createHitboxVisual(tool, hitboxPart)
+    if hitboxVisuals[tool] then
+        hitboxVisuals[tool]:Destroy()
+    end
+    
+    local visual = Instance.new("Part")
+    visual.Name = "HitboxVisual"
+    visual.Shape = Enum.PartType.Ball
+    visual.Size = Vector3.new(CONFIG.CURRENT_DISTANCE, CONFIG.CURRENT_DISTANCE, CONFIG.CURRENT_DISTANCE)
+    visual.Transparency = 0.7
+    visual.Color = Color3.fromRGB(255, 50, 50)
+    visual.Material = Enum.Material.Neon
+    visual.CanCollide = false
+    visual.Anchored = false
+    visual.Parent = hitboxPart
+    
+    local weld = Instance.new("Weld")
+    weld.Part0 = hitboxPart
+    weld.Part1 = visual
+    weld.C0 = CFrame.new(0, 0, 0)
+    weld.Parent = visual
+    
+    hitboxVisuals[tool] = visual
+    
+    return visual
+end
+
+-- Update hitbox size berdasarkan distance setting
+function updateHitboxSize()
+    for tool, data in pairs(hitboxInstances) do
+        if data.hitbox and data.hitbox.Parent then
+            -- Update size
+            data.hitbox.Size = Vector3.new(
+                CONFIG.CURRENT_DISTANCE,
+                CONFIG.CURRENT_DISTANCE,
+                CONFIG.CURRENT_DISTANCE
+            )
+            
+            -- Update visual
+            if CONFIG.SHOW_VISUAL and hitboxVisuals[tool] then
+                hitboxVisuals[tool].Size = Vector3.new(
+                    CONFIG.CURRENT_DISTANCE,
+                    CONFIG.CURRENT_DISTANCE,
+                    CONFIG.CURRENT_DISTANCE
+                )
                 
-                -- Cari UI generator
-                for _, pattern in pairs(GENERATOR_PATTERNS) do
-                    if string.find(objName, string.lower(pattern)) or 
-                       string.find(objText, string.lower(pattern)) then
-                        if not activeSkillchecks[guiObject] then
-                            registerSkillcheck(guiObject, "GENERATOR_UI")
+                -- Update color berdasarkan size
+                local sizePercent = (CONFIG.CURRENT_DISTANCE - CONFIG.MIN_DISTANCE) / 
+                                   (CONFIG.MAX_DISTANCE - CONFIG.MIN_DISTANCE)
+                local color = Color3.fromRGB(
+                    255,
+                    255 - (sizePercent * 200),
+                    50
+                )
+                hitboxVisuals[tool].Color = color
+            end
+        end
+    end
+end
+
+-- Auto attack targets dalam range
+function autoAttackInRange()
+    if not CONFIG.AUTO_HIT or not LocalPlayer.Character then return end
+    
+    local playerRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not playerRoot then return end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            
+            if targetRoot and humanoid and humanoid.Health > 0 then
+                local distance = (targetRoot.Position - playerRoot.Position).Magnitude
+                
+                if distance <= CONFIG.CURRENT_DISTANCE then
+                    -- Team check
+                    if CONFIG.TEAM_CHECK and LocalPlayer.Team and player.Team then
+                        if LocalPlayer.Team == player.Team then
+                            goto continue
                         end
                     end
-                end
-                
-                -- Deteksi progress bar generator
-                if guiObject:IsA("Frame") and guiObject.Name == "ProgressBar" then
-                    if guiObject.Parent and (
-                       string.find(string.lower(guiObject.Parent.Name), "gen") or
-                       string.find(string.lower(guiObject.Parent.Name), "power")) then
-                        registerSkillcheck(guiObject, "GENERATOR_PROGRESS")
+                    
+                    -- Auto hit
+                    local args = {
+                        [1] = targetRoot.Position,
+                        [2] = player.Character
+                    }
+                    
+                    -- Try different remote events
+                    local remotes = {
+                        game:GetService("ReplicatedStorage"):FindFirstChild("HitEvent"),
+                        game:GetService("ReplicatedStorage"):FindFirstChild("DamageEvent"),
+                        game:GetService("ReplicatedStorage"):FindFirstChild("AttackEvent")
+                    }
+                    
+                    for _, remote in pairs(remotes) do
+                        if remote then
+                            pcall(function()
+                                remote:FireServer(unpack(args))
+                            end)
+                        end
                     end
+                    
+                    -- Direct damage
+                    humanoid:TakeDamage(25 * CONFIG.DAMAGE_MULTIPLIER)
+                    
+                    -- Visual effect
+                    createHitEffect(targetRoot.Position)
                 end
             end
         end
+        ::continue::
     end
 end
 
-function colorsSimilar(color1, color2, threshold)
-    local diff = math.abs(color1.R - color2.R) + 
-                 math.abs(color1.G - color2.G) + 
-                 math.abs(color1.B - color2.B)
-    return diff < threshold
-end
-
-function registerGenerator(generatorObj)
-    if generatorObjects[generatorObj] then return end
+-- Buat efek visual saat hit
+function createHitEffect(position)
+    local effect = Instance.new("Part")
+    effect.Size = Vector3.new(2, 2, 2)
+    effect.Position = position
+    effect.Anchored = true
+    effect.CanCollide = false
+    effect.Material = Enum.Material.Neon
+    effect.Color = Color3.fromRGB(255, 0, 0)
+    effect.Transparency = 0.5
+    effect.Parent = workspace
     
-    generatorObjects[generatorObj] = {
-        object = generatorObj,
-        position = generatorObj.Position,
-        lastChecked = tick()
-    }
+    -- Tween untuk efek meledak
+    local tween = TweenService:Create(
+        effect,
+        TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Size = Vector3.new(0, 0, 0), Transparency = 1}
+    )
     
-    if CONFIG.DEBUG_MODE then
-        print("[QUANTUM] Generator detected:", generatorObj.Name, generatorObj.ClassName)
-    end
-    
-    -- Cek proximity setiap 2 detik
-    task.spawn(function()
-        while generatorObjects[generatorObj] do
-            wait(2)
-            checkGeneratorProximity(generatorObj)
-        end
+    tween:Play()
+    tween.Completed:Connect(function()
+        effect:Destroy()
     end)
 end
 
-function checkGeneratorProximity(generatorObj)
-    if not LocalPlayer.Character then return end
-    
-    local charRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not charRoot then return end
-    
-    local distance = (charRoot.Position - generatorObj.Position).Magnitude
-    if distance < 15 then -- Dalam range generator
-        triggerGeneratorSkillcheck()
-    end
-end
-
-function registerSkillcheck(uiObject, skillcheckType)
-    if activeSkillchecks[uiObject] then return end
-    
-    activeSkillchecks[uiObject] = {
-        object = uiObject,
-        type = skillcheckType,
-        detected = tick(),
-        triggered = false
-    }
-    
-    if CONFIG.DEBUG_MODE then
-        print("[QUANTUM]", skillcheckType, "detected:", uiObject.Name)
-    end
-    
-    -- Auto execute generator skillcheck
-    task.spawn(function()
-        executeGeneratorSkillcheck(uiObject, skillcheckType)
-    end)
-end
-
-function executeGeneratorSkillcheck(uiObject, skillcheckType)
-    if not uiObject or not uiObject.Parent then return end
-    
-    wait(CONFIG.REACTION_TIME)
-    
-    local skillcheckData = activeSkillchecks[uiObject]
-    if not skillcheckData or skillcheckData.triggered then return end
-    
-    skillcheckData.triggered = true
-    skillcheckCount = skillcheckCount + 1
-    
-    -- Generator skillcheck biasanya pakai:
-    -- 1. Progress bar yang harus di-stop di zona hijau
-    -- 2. Tombol yang harus ditekan berulang
-    -- 3. Timing tertentu
-    
-    local success = false
-    
-    if skillcheckType == "GENERATOR_UI" then
-        success = handleGeneratorUI(uiObject)
-    elseif skillcheckType == "GENERATOR_PROGRESS" then
-        success = handleProgressBar(uiObject)
-    end
-    
-    if success then
-        perfectCount = perfectCount + 1
-        if CONFIG.NOTIFICATIONS then
-            showNotification("GENERATOR PERFECT! " .. perfectCount .. "/" .. skillcheckCount, Color3.fromRGB(0, 255, 0))
-        end
-        if CONFIG.SOUND_ENABLED then
-            playGeneratorSound()
+-- Attach hitbox ke semua tools
+function attachHitboxes()
+    for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            createVariableHitbox(tool)
         end
     end
     
-    -- Cleanup
-    task.delay(3, function()
-        activeSkillchecks[uiObject] = nil
-    end)
-end
-
-function handleGeneratorUI(uiObject)
-    -- Generator biasanya E atau F
-    local generatorKey = "E"
-    
-    -- Coba detect key dari text di UI
-    for _, child in pairs(uiObject:GetDescendants()) do
-        if child:IsA("TextLabel") or child:IsA("TextButton") then
-            local text = string.upper(child.Text or "")
-            if string.find(text, "E") or string.find(text, "F") or string.find(text, "INTERACT") then
-                if string.find(text, "F") then generatorKey = "F" end
+    -- Juga cek tools yang sedang dipegang
+    if LocalPlayer.Character then
+        for _, tool in pairs(LocalPlayer.Character:GetChildren()) do
+            if tool:IsA("Tool") then
+                createVariableHitbox(tool)
             end
         end
     end
-    
-    -- Tekan key untuk generator
-    keypress(generatorKey)
-    wait(0.1)
-    keyrelease(generatorKey)
-    
-    -- Untuk generator yang butuh hold, tekan lebih lama
-    if uiObject.Name:find("Hold") or uiObject.Name:find("Charge") then
-        wait(0.5)
-        keyrelease(generatorKey)
-    end
-    
-    return true
 end
 
-function handleProgressBar(uiObject)
-    -- Progress bar generator - perlu di-stop di zona tertentu
-    if not uiObject:FindFirstChild("Fill") then return false end
-    
-    local fill = uiObject.Fill
-    local perfectZone = 0.7 -- Biasanya di 70% untuk generator
-    
-    -- Tunggu sampe fill mencapai perfect zone
-    local startTime = tick()
-    while tick() - startTime < 3 do -- Timeout 3 detik
-        if fill.Size.X.Scale >= perfectZone - 0.05 and 
-           fill.Size.X.Scale <= perfectZone + 0.05 then
-            -- Perfect zone! Klik
-            mouse1click()
-            return true
-        end
-        wait(0.01)
-    end
-    
-    return false
-end
-
-function triggerGeneratorSkillcheck()
-    -- Coba trigger skillcheck untuk generator
-    for _, remote in pairs(game:GetDescendants()) do
-        if remote:IsA("RemoteEvent") then
-            local remoteName = string.lower(remote.Name)
-            if string.find(remoteName, "gen") or 
-               string.find(remoteName, "interact") or
-               string.find(remoteName, "repair") then
-                pcall(function()
-                    remote:FireServer("generator")
-                    remote:FireServer("repair")
-                    remote:FireServer("start")
-                end)
-            end
-        end
-    end
-    
-    -- Juga coba klik E
-    keypress("E")
-    wait(0.05)
-    keyrelease("E")
-end
-
--- Input functions
-function mouse1click()
-    pcall(function()
-        UserInputService:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-        wait(0.05)
-        UserInputService:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-    end)
-end
-
-function keypress(key)
-    pcall(function()
-        UserInputService:SendKeyEvent(true, key, false, game)
-    end)
-end
-
-function keyrelease(key)
-    pcall(function()
-        UserInputService:SendKeyEvent(false, key, false, game)
-    end)
-end
-
--- DRAGGABLE UI SYSTEM
+-- DRAGGABLE UI DENGAN SLIDER
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "QuantumGeneratorHack"
+ScreenGui.Name = "QuantumHitboxUI"
 ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 180)
-MainFrame.Position = UI_OFFSET
+MainFrame.Size = UDim2.new(0, 320, 0, 250)
+MainFrame.Position = UDim2.new(0, 10, 0, 10)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-MainFrame.BackgroundTransparency = 0.3
+MainFrame.BackgroundTransparency = 0.2
 MainFrame.BorderSizePixel = 2
-MainFrame.BorderColor3 = Color3.fromRGB(255, 100, 0) -- Orange generator theme
+MainFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
 MainFrame.Parent = ScreenGui
 
 -- Drag handle
 local DragHandle = Instance.new("Frame")
 DragHandle.Name = "DragHandle"
-DragHandle.Size = UDim2.new(1, 0, 0, 30)
-DragHandle.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+DragHandle.Size = UDim2.new(1, 0, 0, 25)
+DragHandle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 DragHandle.BorderSizePixel = 0
 DragHandle.Parent = MainFrame
 
 local DragText = Instance.new("TextLabel")
 DragText.Name = "DragText"
-DragText.Text = "⚡ GENERATOR HACK V4.0 (Drag Here)"
+DragText.Text = "🔥 QUANTUM HITBOX V6 (Drag Me)"
 DragText.Size = UDim2.new(1, 0, 1, 0)
 DragText.BackgroundTransparency = 1
 DragText.TextColor3 = Color3.fromRGB(255, 255, 255)
-DragText.TextSize = 16
+DragText.TextSize = 14
 DragText.Font = Enum.Font.SourceSansBold
 DragText.Parent = DragHandle
 
 -- Make draggable
-if CONFIG.UI_DRAGGABLE then
-    DragHandle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isUIdragging = true
-            dragStartPosition = input.Position
-            MainFrame.BorderColor3 = Color3.fromRGB(255, 200, 0)
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if isUIdragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStartPosition
-            MainFrame.Position = MainFrame.Position + UDim2.new(0, delta.X, 0, delta.Y)
-            dragStartPosition = input.Position
-        end
-    end)
-    
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isUIdragging = false
-            MainFrame.BorderColor3 = Color3.fromRGB(255, 100, 0)
-            UI_OFFSET = MainFrame.Position -- Save position
-        end
-    end)
-end
+local isDragging = false
+local dragStartPos = nil
+
+DragHandle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDragging = true
+        dragStartPos = input.Position
+        MainFrame.BorderColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStartPos
+        MainFrame.Position = MainFrame.Position + UDim2.new(0, delta.X, 0, delta.Y)
+        dragStartPos = input.Position
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDragging = false
+        MainFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end)
 
 -- Title
 local Title = Instance.new("TextLabel")
-Title.Text = "⚡ QUANTUM GENERATOR HACK ⚡"
-Title.Size = UDim2.new(1, 0, 0, 25)
-Title.Position = UDim2.new(0, 0, 0, 35)
+Title.Text = "⚡ VARIABLE HITBOX CONTROLS ⚡"
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Position = UDim2.new(0, 0, 0, 30)
 Title.BackgroundTransparency = 1
-Title.TextColor3 = Color3.fromRGB(255, 200, 0)
+Title.TextColor3 = Color3.fromRGB(255, 100, 100)
 Title.TextSize = 18
 Title.Font = Enum.Font.SourceSansBold
 Title.Parent = MainFrame
 
--- Stats Display
-local StatsLabel = Instance.new("TextLabel")
-StatsLabel.Name = "StatsLabel"
-StatsLabel.Text = "Generator Perfect: 0/0 (100%)"
-StatsLabel.Size = UDim2.new(1, 0, 0, 25)
-StatsLabel.Position = UDim2.new(0, 0, 0, 65)
-StatsLabel.BackgroundTransparency = 1
-StatsLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-StatsLabel.TextSize = 16
-StatsLabel.Font = Enum.Font.SourceSansBold
-StatsLabel.Parent = MainFrame
+-- Distance Slider
+local SliderFrame = Instance.new("Frame")
+SliderFrame.Size = UDim2.new(0.9, 0, 0, 50)
+SliderFrame.Position = UDim2.new(0.05, 0, 0, 70)
+SliderFrame.BackgroundTransparency = 1
+SliderFrame.Parent = MainFrame
 
--- Toggle Buttons Grid
-local buttonGrid = Instance.new("Frame")
-buttonGrid.Name = "ButtonGrid"
-buttonGrid.Size = UDim2.new(1, -20, 0, 80)
-buttonGrid.Position = UDim2.new(0, 10, 0, 95)
-buttonGrid.BackgroundTransparency = 1
-buttonGrid.Parent = MainFrame
+local SliderLabel = Instance.new("TextLabel")
+SliderLabel.Text = "HITBOX DISTANCE: " .. CONFIG.CURRENT_DISTANCE .. " studs"
+SliderLabel.Size = UDim2.new(1, 0, 0, 20)
+SliderLabel.BackgroundTransparency = 1
+SliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+SliderLabel.TextSize = 14
+SliderLabel.Font = Enum.Font.SourceSansBold
+SliderLabel.Parent = SliderFrame
 
-local function CreateToggle(text, setting, position)
-    local button = Instance.new("TextButton")
-    button.Text = text .. "\n" .. (CONFIG[setting] and "[ON]" or "[OFF]")
-    button.Size = UDim2.new(0.45, 0, 0, 35)
-    button.Position = position
-    button.BackgroundColor3 = CONFIG[setting] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(100, 0, 0)
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.TextSize = 12
-    button.Font = Enum.Font.SourceSans
-    button.Parent = buttonGrid
-    
-    button.MouseButton1Click:Connect(function()
-        CONFIG[setting] = not CONFIG[setting]
-        button.Text = text .. "\n" .. (CONFIG[setting] and "[ON]" or "[OFF]")
-        button.BackgroundColor3 = CONFIG[setting] and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(100, 0, 0)
+local SliderTrack = Instance.new("Frame")
+SliderTrack.Name = "SliderTrack"
+SliderTrack.Size = UDim2.new(1, 0, 0, 10)
+SliderTrack.Position = UDim2.new(0, 0, 0, 25)
+SliderTrack.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+SliderTrack.BorderSizePixel = 0
+SliderTrack.Parent = SliderFrame
+
+local SliderFill = Instance.new("Frame")
+SliderFill.Name = "SliderFill"
+SliderFill.Size = UDim2.new(
+    (CONFIG.CURRENT_DISTANCE - CONFIG.MIN_DISTANCE) / 
+    (CONFIG.MAX_DISTANCE - CONFIG.MIN_DISTANCE), 
+    0, 1, 0
+)
+SliderFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+SliderFill.BorderSizePixel = 0
+SliderFill.Parent = SliderTrack
+
+local SliderButton = Instance.new("TextButton")
+SliderButton.Name = "SliderButton"
+SliderButton.Size = UDim2.new(0, 20, 0, 20)
+SliderButton.Position = UDim2.new(SliderFill.Size.X.Scale, -10, 0, -5)
+SliderButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+SliderButton.Text = ""
+SliderButton.Parent = SliderFrame
+
+-- Slider functionality
+local sliding = false
+SliderButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliding = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if sliding and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local mousePos = input.Position.X
+        local framePos = SliderTrack.AbsolutePosition.X
+        local frameSize = SliderTrack.AbsoluteSize.X
         
-        if setting == "ENABLED" and CONFIG[setting] then
-            startGeneratorDetection()
+        local relativePos = math.clamp((mousePos - framePos) / frameSize, 0, 1)
+        
+        -- Update slider visual
+        SliderFill.Size = UDim2.new(relativePos, 0, 1, 0)
+        SliderButton.Position = UDim2.new(relativePos, -10, 0, -5)
+        
+        -- Update distance value
+        local newDistance = math.floor(
+            CONFIG.MIN_DISTANCE + 
+            (relativePos * (CONFIG.MAX_DISTANCE - CONFIG.MIN_DISTANCE))
+        )
+        
+        CONFIG.CURRENT_DISTANCE = newDistance
+        SliderLabel.Text = "HITBOX DISTANCE: " .. newDistance .. " studs"
+        
+        -- Update color based on distance
+        local colorValue = math.clamp(relativePos * 255, 0, 255)
+        SliderFill.BackgroundColor3 = Color3.fromRGB(255, 255 - colorValue, 50)
+        
+        -- Update hitbox size
+        updateHitboxSize()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliding = false
+    end
+end)
+
+-- Toggle buttons grid
+local toggleGrid = Instance.new("Frame")
+toggleGrid.Size = UDim2.new(1, -20, 0, 90)
+toggleGrid.Position = UDim2.new(0, 10, 0, 130)
+toggleGrid.BackgroundTransparency = 1
+toggleGrid.Parent = MainFrame
+
+local function CreateToggleBtn(text, setting, position)
+    local btn = Instance.new("TextButton")
+    btn.Text = text .. "\n" .. (CONFIG[setting] and "ON" or "OFF")
+    btn.Size = UDim2.new(0.3, 0, 0, 40)
+    btn.Position = position
+    btn.BackgroundColor3 = CONFIG[setting] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 12
+    btn.Font = Enum.Font.SourceSans
+    btn.Parent = toggleGrid
+    
+    btn.MouseButton1Click:Connect(function()
+        CONFIG[setting] = not CONFIG[setting]
+        btn.Text = text .. "\n" .. (CONFIG[setting] and "ON" or "OFF")
+        btn.BackgroundColor3 = CONFIG[setting] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+        
+        if setting == "SHOW_VISUAL" then
+            updateHitboxSize()
         end
     end)
 end
 
 -- Create toggle buttons
-CreateToggle("Auto Skillcheck", "ENABLED", UDim2.new(0, 0, 0, 0))
-CreateToggle("Perfect Mode", "PERFECT_MODE", UDim2.new(0.55, 0, 0, 0))
-CreateToggle("Generator Mode", "GENERATOR_MODE", UDim2.new(0, 0, 0, 40))
-CreateToggle("Draggable UI", "UI_DRAGGABLE", UDim2.new(0.55, 0, 0, 40))
+CreateToggleBtn("Hitbox", "ENABLED", UDim2.new(0, 0, 0, 0))
+CreateToggleBtn("Auto Hit", "AUTO_HIT", UDim2.new(0.35, 0, 0, 0))
+CreateToggleBtn("Visual", "SHOW_VISUAL", UDim2.new(0.7, 0, 0, 0))
+CreateToggleBtn("Team Check", "TEAM_CHECK", UDim2.new(0, 0, 0, 45))
+CreateToggleBtn("Auto Attach", "AUTO_ATTACH", UDim2.new(0.35, 0, 0, 45))
 
--- Status indicator
-local statusLight = Instance.new("Frame")
-statusLight.Name = "StatusLight"
-statusLight.Size = UDim2.new(0, 10, 0, 10)
-statusLight.Position = UDim2.new(1, -15, 0, 5)
-statusLight.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-statusLight.BorderSizePixel = 0
-statusLight.Parent = MainFrame
+-- Damage multiplier slider
+local damageSlider = Instance.new("Frame")
+damageSlider.Size = UDim2.new(0.9, 0, 0, 30)
+damageSlider.Position = UDim2.new(0.05, 0, 0, 230)
+damageSlider.BackgroundTransparency = 1
+damageSlider.Parent = MainFrame
 
--- Close button
-local closeButton = Instance.new("TextButton")
-closeButton.Text = "X"
-closeButton.Size = UDim2.new(0, 20, 0, 20)
-closeButton.Position = UDim2.new(1, -25, 0, 5)
-closeButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeButton.Parent = MainFrame
+local damageLabel = Instance.new("TextLabel")
+damageLabel.Text = "Damage Multiplier: " .. CONFIG.DAMAGE_MULTIPLIER .. "x"
+damageLabel.Size = UDim2.new(1, 0, 0, 15)
+damageLabel.BackgroundTransparency = 1
+damageLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+damageLabel.TextSize = 12
+damageLabel.Parent = damageSlider
 
-closeButton.MouseButton1Click:Connect(function()
-    ScreenGui:Destroy()
-    CONFIG.ENABLED = false
+local damageValue = Instance.new("TextButton")
+damageValue.Text = "▲ " .. CONFIG.DAMAGE_MULTIPLIER .. "x ▼"
+damageValue.Size = UDim2.new(1, 0, 0, 20)
+damageValue.Position = UDim2.new(0, 0, 0, 15)
+damageValue.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+damageValue.TextColor3 = Color3.fromRGB(255, 255, 255)
+damageValue.Parent = damageSlider
+
+damageValue.MouseButton1Click:Connect(function()
+    CONFIG.DAMAGE_MULTIPLIER = CONFIG.DAMAGE_MULTIPLIER + 0.5
+    if CONFIG.DAMAGE_MULTIPLIER > 5 then
+        CONFIG.DAMAGE_MULTIPLIER = 1.0
+    end
+    damageValue.Text = "▲ " .. CONFIG.DAMAGE_MULTIPLIER .. "x ▼"
+    damageLabel.Text = "Damage Multiplier: " .. CONFIG.DAMAGE_MULTIPLIER .. "x"
 end)
 
--- Update functions
-function updateStats()
-    local percentage = skillcheckCount > 0 and math.floor((perfectCount / skillcheckCount) * 100) or 100
-    StatsLabel.Text = string.format("Generator Perfect: %d/%d (%d%%)", perfectCount, skillcheckCount, percentage)
-    
-    -- Update color
-    if percentage >= 90 then
-        StatsLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-        statusLight.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-    elseif percentage >= 70 then
-        StatsLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-        statusLight.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
-    else
-        StatsLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-        statusLight.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-    end
-end
+-- Status display
+local statusText = Instance.new("TextLabel")
+statusText.Text = "Targets Hit: 0 | Range: " .. CONFIG.CURRENT_DISTANCE .. " studs"
+statusText.Size = UDim2.new(1, 0, 0, 20)
+statusText.Position = UDim2.new(0, 0, 1, -25)
+statusText.BackgroundTransparency = 1
+statusText.TextColor3 = Color3.fromRGB(0, 255, 0)
+statusText.TextSize = 12
+statusText.Font = Enum.Font.SourceSansBold
+statusText.Parent = MainFrame
 
-function showNotification(text, color)
-    game.StarterGui:SetCore("SendNotification", {
-        Title = "⚡ GENERATOR HACK",
-        Text = text,
-        Duration = 2,
-        Icon = "rbxassetid://9998632201",
-    })
-end
-
-function playGeneratorSound()
-    local sound = Instance.new("Sound")
-    sound.SoundId = "rbxassetid://3570572155" -- Generator/engine sound
-    sound.Volume = 0.2
-    sound.Parent = workspace
-    sound:Play()
-    game:GetService("Debris"):AddItem(sound, 2)
-end
-
--- Main detection loop
-function startGeneratorDetection()
+-- Auto attach hitboxes
+if CONFIG.AUTO_ATTACH then
     task.spawn(function()
-        while CONFIG.ENABLED and CONFIG.GENERATOR_MODE do
-            detectGeneratorSkillcheck()
-            updateStats()
-            task.wait(0.2) -- Check 5 times per second
+        wait(2)
+        attachHitboxes()
+        
+        -- Auto attach when tool added
+        LocalPlayer.Backpack.ChildAdded:Connect(function(child)
+            wait(0.5)
+            if child:IsA("Tool") then
+                createVariableHitbox(child)
+            end
+        end)
+        
+        -- Auto attach when tool equipped
+        if LocalPlayer.Character then
+            LocalPlayer.Character.ChildAdded:Connect(function(child)
+                if child:IsA("Tool") then
+                    createVariableHitbox(child)
+                end
+            end)
         end
     end)
 end
 
--- Auto-start
-if CONFIG.AUTO_ENABLE then
-    task.spawn(function()
-        wait(3) -- Tunggu game load
-        showNotification("Quantum Generator Hack Loaded!\nDrag the orange bar to move UI.", Color3.fromRGB(255, 150, 0))
-        startGeneratorDetection()
-        print("[QUANTUM] Generator skillcheck hack activated. UI is draggable!")
-    end)
-end
-
--- Cleanup
-game.Players.LocalPlayer.CharacterAdded:Connect(function()
-    generatorObjects = {}
-    activeSkillchecks = {}
-    skillcheckCount = 0
-    perfectCount = 0
+-- Main loop
+RunService.Heartbeat:Connect(function(deltaTime)
+    if CONFIG.ENABLED then
+        -- Auto attack jika enabled
+        if CONFIG.AUTO_HIT then
+            autoAttackInRange()
+        end
+        
+        -- Update status
+        local targetCount = 0
+        for _ in pairs(targetList) do
+            targetCount = targetCount + 1
+        end
+        
+        statusText.Text = string.format(
+            "Targets Hit: %d | Range: %d studs | Damage: %dx",
+            targetCount,
+            CONFIG.CURRENT_DISTANCE,
+            CONFIG.DAMAGE_MULTIPLIER
+        )
+    end
 end)
+
+-- Cleanup old targets
+task.spawn(function()
+    while true do
+        wait(5)
+        local currentTime = tick()
+        for target, data in pairs(targetList) do
+            if currentTime - data.lastHit > 30 then -- Clean setelah 30 detik
+                targetList[target] = nil
+            end
+        end
+    end
+end)
+
+-- Notification
+game.StarterGui:SetCore("SendNotification", {
+    Title = "QUANTUM VARIABLE HITBOX V6",
+    Text = "Loaded! Drag UI to move. Slider controls distance (10-100 studs)",
+    Duration = 5,
+})
+
+print("[QUANTUM] Variable Hitbox V6 loaded! Distance control: " .. CONFIG.MIN_DISTANCE .. "-" .. CONFIG.MAX_DISTANCE .. " studs")
