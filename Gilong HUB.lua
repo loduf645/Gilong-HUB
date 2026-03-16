@@ -1,355 +1,296 @@
--- QUANTUM ESP WALLHACK V5.0
--- © RianModss - Works on 99% Roblox games
--- Inject dengan executor (Synapse X, KRNL, Script-Ware, dll)
+-- Simple Aimlock Script with GUI
+-- Target Selection & Camera Lock System
 
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local Camera = Workspace.CurrentCamera
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- Quantum ESP Configuration
-local ESP_SETTINGS = {
-    ENABLED = true,
-    SHOW_NAMES = true,
-    SHOW_DISTANCE = true,
-    SHOW_HEALTH = true,
-    SHOW_BOX = true,
-    SHOW_TRACERS = true,
-    SHOW_WEAPONS = true,
-    MAX_DISTANCE = 1000, -- studs
-    UPDATE_RATE = 0.1, -- seconds
-    TEAM_CHECK = false, -- true = hanya musuh, false = semua
-}
+-- Global Variables
+_G.aimlockEnabled = false
+_G.selectedTarget = nil
+_G.aimSmoothness = 0.2
+_G.lockKey = Enum.KeyCode.Q
 
--- Colors
-local COLORS = {
-    ENEMY = Color3.fromRGB(255, 50, 50),    -- Merah
-    TEAMMATE = Color3.fromRGB(50, 255, 50), -- Hijau
-    NEUTRAL = Color3.fromRGB(255, 255, 50), -- Kuning
-    TEXT = Color3.fromRGB(255, 255, 255),   -- Putih
-}
+-- Create GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AimlockGUI"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
 
--- Storage for ESP objects
-local ESP_Objects = {}
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 400)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(0, 255, 255)
+MainFrame.Parent = ScreenGui
+MainFrame.Active = true
+MainFrame.Draggable = true
 
--- Quantum ESP Functions
-function CreateESP(player)
-    if not player.Character then return end
-    if ESP_Objects[player] then return end
-    
-    local character = player.Character
-    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-    
-    -- Create ESP Container
-    local espContainer = Instance.new("Folder")
-    espContainer.Name = "QuantumESP_" .. player.Name
-    espContainer.Parent = Camera
-    
-    ESP_Objects[player] = {
-        Container = espContainer,
-        Character = character,
-        Player = player
-    }
-    
-    -- Box ESP
-    if ESP_SETTINGS.SHOW_BOX then
-        local box = Instance.new("BoxHandleAdornment")
-        box.Name = "Box"
-        box.Adornee = humanoidRootPart
-        box.AlwaysOnTop = true
-        box.ZIndex = 5
-        box.Size = Vector3.new(4, 6, 2)
-        box.Transparency = 0.7
-        box.Color3 = GetPlayerColor(player)
-        box.Parent = espContainer
-    end
-    
-    -- Tracer Line
-    if ESP_SETTINGS.SHOW_TRACERS then
-        local tracer = Instance.new("Frame")
-        tracer.Name = "Tracer"
-        tracer.Size = UDim2.new(0, 2, 0, 2000)
-        tracer.BackgroundColor3 = GetPlayerColor(player)
-        tracer.BorderSizePixel = 0
-        tracer.BackgroundTransparency = 0.5
-        tracer.Parent = espContainer
-    end
-    
-    -- Billboard GUI for Info
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "Info"
-    billboard.Size = UDim2.new(0, 200, 0, 150)
-    billboard.StudsOffset = Vector3.new(0, 3.5, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Adornee = humanoidRootPart
-    billboard.Parent = espContainer
-    
-    -- Player Name
-    if ESP_SETTINGS.SHOW_NAMES then
-        local nameLabel = Instance.new("TextLabel")
-        nameLabel.Name = "Name"
-        nameLabel.Size = UDim2.new(1, 0, 0, 20)
-        nameLabel.Position = UDim2.new(0, 0, 0, 0)
-        nameLabel.BackgroundTransparency = 1
-        nameLabel.TextColor3 = COLORS.TEXT
-        nameLabel.TextStrokeTransparency = 0
-        nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-        nameLabel.TextSize = 16
-        nameLabel.Font = Enum.Font.SourceSansBold
-        nameLabel.Text = player.Name
-        nameLabel.Parent = billboard
-    end
-    
-    -- Distance
-    if ESP_SETTINGS.SHOW_DISTANCE then
-        local distanceLabel = Instance.new("TextLabel")
-        distanceLabel.Name = "Distance"
-        distanceLabel.Size = UDim2.new(1, 0, 0, 20)
-        distanceLabel.Position = UDim2.new(0, 0, 0, 20)
-        distanceLabel.BackgroundTransparency = 1
-        distanceLabel.TextColor3 = COLORS.TEXT
-        distanceLabel.TextStrokeTransparency = 0
-        distanceLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-        distanceLabel.TextSize = 14
-        distanceLabel.Font = Enum.Font.SourceSans
-        distanceLabel.Parent = billboard
-    end
-    
-    -- Health Bar
-    if ESP_SETTINGS.SHOW_HEALTH then
-        local healthBar = Instance.new("Frame")
-        healthBar.Name = "HealthBar"
-        healthBar.Size = UDim2.new(1, 0, 0, 5)
-        healthBar.Position = UDim2.new(0, 0, 0, 40)
-        healthBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        healthBar.BorderSizePixel = 0
-        healthBar.Parent = billboard
-        
-        local healthFill = Instance.new("Frame")
-        healthFill.Name = "HealthFill"
-        healthFill.Size = UDim2.new(1, 0, 1, 0)
-        healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        healthFill.BorderSizePixel = 0
-        healthFill.Parent = healthBar
-    end
-    
-    -- Weapon Info
-    if ESP_SETTINGS.SHOW_WEAPONS then
-        local weaponLabel = Instance.new("TextLabel")
-        weaponLabel.Name = "Weapon"
-        weaponLabel.Size = UDim2.new(1, 0, 0, 20)
-        weaponLabel.Position = UDim2.new(0, 0, 0, 50)
-        weaponLabel.BackgroundTransparency = 1
-        weaponLabel.TextColor3 = COLORS.TEXT
-        weaponLabel.TextStrokeTransparency = 0
-        weaponLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-        weaponLabel.TextSize = 12
-        weaponLabel.Font = Enum.Font.SourceSans
-        weaponLabel.Text = "Weapon: None"
-        weaponLabel.Parent = billboard
-    end
-end
+-- Add corner radius
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = MainFrame
 
-function GetPlayerColor(player)
-    if ESP_SETTINGS.TEAM_CHECK then
-        if LocalPlayer.Team and player.Team then
-            if LocalPlayer.Team == player.Team then
-                return COLORS.TEAMMATE
-            else
-                return COLORS.ENEMY
-            end
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundColor3 = Color3.fromRGB(0, 255, 255)
+Title.Text = "AIMLOCK SYSTEM"
+Title.TextColor3 = Color3.fromRGB(0, 0, 0)
+Title.TextSize = 20
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = Title
+
+-- Toggle Button
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0.9, 0, 0, 50)
+ToggleButton.Position = UDim2.new(0.05, 0, 0, 60)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+ToggleButton.Text = "AIMLOCK: OFF"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 18
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Parent = MainFrame
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 8)
+ToggleCorner.Parent = ToggleButton
+
+-- Player List Label
+local ListLabel = Instance.new("TextLabel")
+ListLabel.Size = UDim2.new(1, 0, 0, 30)
+ListLabel.Position = UDim2.new(0, 0, 0, 120)
+ListLabel.BackgroundTransparency = 1
+ListLabel.Text = "SELECT TARGET PLAYER:"
+ListLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+ListLabel.TextSize = 14
+ListLabel.Font = Enum.Font.Gotham
+ListLabel.Parent = MainFrame
+
+-- Scroll Frame for Player List
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(0.9, 0, 0, 180)
+ScrollFrame.Position = UDim2.new(0.05, 0, 0, 155)
+ScrollFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ScrollFrame.BorderColor3 = Color3.fromRGB(0, 255, 255)
+ScrollFrame.ScrollBarThickness = 6
+ScrollFrame.Parent = MainFrame
+
+local ScrollCorner = Instance.new("UICorner")
+ScrollCorner.CornerRadius = UDim.new(0, 8)
+ScrollCorner.Parent = ScrollFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Padding = UDim.new(0, 5)
+UIListLayout.Parent = ScrollFrame
+
+-- Status Label
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, 0, 0, 40)
+StatusLabel.Position = UDim2.new(0, 0, 0, 345)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Status: No target selected"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+StatusLabel.TextSize = 12
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.Parent = MainFrame
+
+-- Smoothness Slider Label
+local SmoothnessLabel = Instance.new("TextLabel")
+SmoothnessLabel.Size = UDim2.new(0.5, 0, 0, 20)
+SmoothnessLabel.Position = UDim2.new(0.05, 0, 0, 370)
+SmoothnessLabel.BackgroundTransparency = 1
+SmoothnessLabel.Text = "Smoothness: 0.2"
+SmoothnessLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+SmoothnessLabel.TextSize = 10
+SmoothnessLabel.Font = Enum.Font.Gotham
+SmoothnessLabel.Parent = MainFrame
+
+-- Functions
+local function updatePlayerList()
+    -- Clear existing buttons
+    for _, child in pairs(ScrollFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
         end
     end
-    return COLORS.NEUTRAL
-end
-
-function UpdateESP()
-    for player, espData in pairs(ESP_Objects) do
-        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Cleanup jika player mati atau keluar
-            if espData.Container then
-                espData.Container:Destroy()
-            end
-            ESP_Objects[player] = nil
-            goto continue
-        end
-        
-        local character = player.Character
-        local humanoidRootPart = character.HumanoidRootPart
-        local humanoid = character:FindFirstChild("Humanoid")
-        
-        -- Update position
-        local screenPosition, onScreen = Camera:WorldToViewportPoint(humanoidRootPart.Position)
-        
-        if espData.Container and onScreen and ESP_SETTINGS.ENABLED then
-            -- Update distance
-            if ESP_SETTINGS.SHOW_DISTANCE then
-                local distance = (humanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                local distanceLabel = espData.Container.Info:FindFirstChild("Distance")
-                if distanceLabel then
-                    distanceLabel.Text = string.format("Distance: %d studs", math.floor(distance))
-                    
-                    -- Red jika terlalu dekat
-                    if distance < 50 then
-                        distanceLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-                    else
-                        distanceLabel.TextColor3 = COLORS.TEXT
-                    end
-                end
-            end
-            
-            -- Update health
-            if ESP_SETTINGS.SHOW_HEALTH and humanoid then
-                local healthBar = espData.Container.Info:FindFirstChild("HealthBar")
-                if healthBar then
-                    local healthFill = healthBar:FindFirstChild("HealthFill")
-                    if healthFill then
-                        local healthPercent = humanoid.Health / humanoid.MaxHealth
-                        healthFill.Size = UDim2.new(healthPercent, 0, 1, 0)
-                        
-                        -- Color based on health
-                        if healthPercent > 0.5 then
-                            healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
-                        elseif healthPercent > 0.25 then
-                            healthFill.BackgroundColor3 = Color3.fromRGB(255, 255, 0) -- Yellow
-                        else
-                            healthFill.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
-                        end
-                    end
-                end
-            end
-            
-            -- Update weapon
-            if ESP_SETTINGS.SHOW_WEAPONS then
-                local weaponLabel = espData.Container.Info:FindFirstChild("Weapon")
-                if weaponLabel then
-                    local tool = character:FindFirstChildOfClass("Tool")
-                    if tool then
-                        weaponLabel.Text = "Weapon: " .. tool.Name
-                    else
-                        weaponLabel.Text = "Weapon: None"
-                    end
-                end
-            end
-            
-            -- Update tracer
-            if ESP_SETTINGS.SHOW_TRACERS then
-                local tracer = espData.Container:FindFirstChild("Tracer")
-                if tracer then
-                    local screenPos = Camera:WorldToViewportPoint(humanoidRootPart.Position)
-                    tracer.Position = UDim2.new(0.5, 0, 1, 0)
-                    tracer.Rotation = math.deg(math.atan2(
-                        screenPos.Y - Camera.ViewportSize.Y,
-                        screenPos.X - Camera.ViewportSize.X/2
-                    )) + 90
-                end
-            end
-            
-            -- Update colors based on team
-            local color = GetPlayerColor(player)
-            local box = espData.Container:FindFirstChild("Box")
-            if box then box.Color3 = color end
-            
-            local tracer = espData.Container:FindFirstChild("Tracer")
-            if tracer then tracer.BackgroundColor3 = color end
-        else
-            -- Hide if not on screen
-            if espData.Container then
-                espData.Container.Enabled = false
-            end
-        end
-        
-        ::continue::
-    end
-end
-
--- Initialize ESP for all players
-function InitializeESP()
-    -- Add ESP for existing players
+    
+    -- Create button for each player
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
-            CreateESP(player)
+            local PlayerButton = Instance.new("TextButton")
+            PlayerButton.Size = UDim2.new(1, -10, 0, 35)
+            PlayerButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            PlayerButton.Text = player.Name
+            PlayerButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            PlayerButton.TextSize = 14
+            PlayerButton.Font = Enum.Font.Gotham
+            PlayerButton.Parent = ScrollFrame
+            
+            local ButtonCorner = Instance.new("UICorner")
+            ButtonCorner.CornerRadius = UDim.new(0, 6)
+            ButtonCorner.Parent = PlayerButton
+            
+            -- Click to select
+            PlayerButton.MouseButton1Click:Connect(function()
+                _G.selectedTarget = player
+                
+                -- Update all buttons colors
+                for _, btn in pairs(ScrollFrame:GetChildren()) do
+                    if btn:IsA("TextButton") then
+                        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                    end
+                end
+                
+                -- Highlight selected
+                PlayerButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                
+                StatusLabel.Text = "Target: " .. player.Name
+                StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+            end)
         end
     end
     
-    -- Add ESP for new players
-    Players.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(function()
-            wait(1)
-            CreateESP(player)
-        end)
-    end)
+    -- Update canvas size
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 10)
+end
+
+-- Toggle Aimlock
+ToggleButton.MouseButton1Click:Connect(function()
+    _G.aimlockEnabled = not _G.aimlockEnabled
     
-    -- Remove ESP when player leaves
-    Players.PlayerRemoving:Connect(function(player)
-        if ESP_Objects[player] then
-            ESP_Objects[player].Container:Destroy()
-            ESP_Objects[player] = nil
+    if _G.aimlockEnabled then
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+        ToggleButton.Text = "AIMLOCK: ON"
+        
+        if not _G.selectedTarget then
+            StatusLabel.Text = "Warning: No target selected!"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
         end
-    end)
-    
-    -- Update ESP continuously
-    RunService.Heartbeat:Connect(function()
-        UpdateESP()
-    end)
-end
+    else
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+        ToggleButton.Text = "AIMLOCK: OFF"
+        StatusLabel.Text = "Aimlock disabled"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+    end
+end)
 
--- GUI Controls
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+-- Aimlock Logic
+local aimlockConnection
+aimlockConnection = RunService.RenderStepped:Connect(function()
+    if _G.aimlockEnabled and _G.selectedTarget then
+        local target = _G.selectedTarget
+        
+        -- Check if target still exists and has character
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            local targetHead = target.Character.Head
+            
+            -- Calculate camera position
+            local targetPosition = targetHead.Position
+            local cameraCFrame = Camera.CFrame
+            local targetCFrame = CFrame.new(cameraCFrame.Position, targetPosition)
+            
+            -- Smooth camera movement
+            Camera.CFrame = cameraCFrame:Lerp(targetCFrame, _G.aimSmoothness)
+        else
+            StatusLabel.Text = "Target lost! Select new target"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+            _G.selectedTarget = nil
+            updatePlayerList()
+        end
+    end
+end)
 
-local ControlFrame = Instance.new("Frame")
-ControlFrame.Size = UDim2.new(0, 200, 0, 250)
-ControlFrame.Position = UDim2.new(0, 10, 0, 10)
-ControlFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-ControlFrame.BackgroundTransparency = 0.3
-ControlFrame.Parent = ScreenGui
+-- Hotkey to toggle (Q key)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == _G.lockKey then
+        ToggleButton.MouseButton1Click:Fire()
+    end
+end)
 
-local Title = Instance.new("TextLabel")
-Title.Text = "QUANTUM ESP V5.0"
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Parent = ControlFrame
+-- Update player list when players join/leave
+Players.PlayerAdded:Connect(function()
+    wait(1)
+    updatePlayerList()
+end)
 
--- Toggle Buttons
-local yPos = 40
-local function CreateToggle(text, setting, yPos)
-    local button = Instance.new("TextButton")
-    button.Text = text .. ": " .. (ESP_SETTINGS[setting] and "ON" or "OFF")
-    button.Size = UDim2.new(0.9, 0, 0, 30)
-    button.Position = UDim2.new(0.05, 0, 0, yPos)
-    button.BackgroundColor3 = ESP_SETTINGS[setting] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Parent = ControlFrame
-    
-    button.MouseButton1Click:Connect(function()
-        ESP_SETTINGS[setting] = not ESP_SETTINGS[setting]
-        button.Text = text .. ": " .. (ESP_SETTINGS[setting] and "ON" or "OFF")
-        button.BackgroundColor3 = ESP_SETTINGS[setting] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    end)
-    
-    return yPos + 35
-end
+Players.PlayerRemoving:Connect(function(player)
+    if _G.selectedTarget == player then
+        _G.selectedTarget = nil
+        StatusLabel.Text = "Target left! Select new target"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    end
+    updatePlayerList()
+end)
 
-yPos = CreateToggle("ESP", "ENABLED", yPos)
-yPos = CreateToggle("Names", "SHOW_NAMES", yPos)
-yPos = CreateToggle("Distance", "SHOW_DISTANCE", yPos)
-yPos = CreateToggle("Health", "SHOW_HEALTH", yPos)
-yPos = CreateToggle("Box", "SHOW_BOX", yPos)
-yPos = CreateToggle("Tracers", "SHOW_TRACERS", yPos)
-yPos = CreateToggle("Weapons", "SHOW_WEAPONS", yPos)
-yPos = CreateToggle("Team Check", "TEAM_CHECK", yPos)
+-- Close Button
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Position = UDim2.new(1, -35, 0, 5)
+CloseButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 18
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Parent = MainFrame
 
--- Start ESP
-InitializeESP()
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(1, 0)
+CloseCorner.Parent = CloseButton
+
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+    if aimlockConnection then
+        aimlockConnection:Disconnect()
+    end
+end)
+
+-- Minimize Button
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Size = UDim2.new(0, 30, 0, 30)
+MinimizeButton.Position = UDim2.new(1, -70, 0, 5)
+MinimizeButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+MinimizeButton.Text = "_"
+MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeButton.TextSize = 18
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.Parent = MainFrame
+
+local MinCorner = Instance.new("UICorner")
+MinCorner.CornerRadius = UDim.new(1, 0)
+MinCorner.Parent = MinimizeButton
+
+local minimized = false
+MinimizeButton.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        MainFrame.Size = UDim2.new(0, 300, 0, 40)
+        MinimizeButton.Text = "+"
+    else
+        MainFrame.Size = UDim2.new(0, 300, 0, 400)
+        MinimizeButton.Text = "_"
+    end
+end)
+
+-- Initialize
+updatePlayerList()
 
 -- Notification
-game.StarterGui:SetCore("SendNotification", {
-    Title = "QUANTUM ESP LOADED",
-    Text = "Wallhack activated! Use controls on top-left.",
-    Duration = 5
-})
+local function notify(text)
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "AIMLOCK SYSTEM",
+        Text = text,
+        Duration = 3
+    })
+end
 
-print("[QUANTUM] ESP V5.0 injected successfully. See through walls enabled!")
+notify("Aimlock GUI loaded! Press Q to toggle aimlock")
+notify("Select a target from the list and enable aimlock")
