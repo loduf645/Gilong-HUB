@@ -1,5 +1,5 @@
--- Simple Aimlock Script with GUI
--- Target Selection & Camera Lock System
+-- Simple Aimlock Script with GUI + ESP
+-- Target Selection & Camera Lock System + ESP (Nama, Darah, Jarak)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,6 +14,7 @@ _G.selectedTarget = nil
 _G.aimSmoothness = 0.2
 _G.lockKey = Enum.KeyCode.Q
 _G.aimPart = "Head" -- Bisa diganti: Head, HumanoidRootPart, UpperTorso
+_G.espEnabled = false -- Fitur ESP
 
 -- Validasi target
 local function isValidTarget(target)
@@ -29,8 +30,8 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 -- Main Frame
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 320, 0, 450)
-MainFrame.Position = UDim2.new(0.5, -160, 0.5, -225)
+MainFrame.Size = UDim2.new(0, 320, 0, 520) -- Ditambah tinggi untuk tombol ESP
+MainFrame.Position = UDim2.new(0.5, -160, 0.5, -260)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Parent = ScreenGui
@@ -60,9 +61,9 @@ Corner.Parent = MainFrame
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 45)
 Title.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-Title.Text = "🎯 AIMLOCK SYSTEM"
+Title.Text = "🎯 AIMLOCK + ESP SYSTEM"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 22
+Title.TextSize = 20
 Title.Font = Enum.Font.GothamBold
 Title.Parent = MainFrame
 
@@ -78,14 +79,14 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 12)
 TitleCorner.Parent = Title
 
--- Toggle Button
+-- Toggle Button Aimlock
 local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(0.9, 0, 0, 45)
+ToggleButton.Size = UDim2.new(0.9, 0, 0, 40)
 ToggleButton.Position = UDim2.new(0.05, 0, 0, 55)
 ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
 ToggleButton.Text = "⚡ AIMLOCK: OFF"
 ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleButton.TextSize = 18
+ToggleButton.TextSize = 16
 ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.Parent = MainFrame
 ToggleButton.AutoButtonColor = false
@@ -94,10 +95,26 @@ local ToggleCorner = Instance.new("UICorner")
 ToggleCorner.CornerRadius = UDim.new(0, 8)
 ToggleCorner.Parent = ToggleButton
 
+-- Toggle Button ESP
+local ESPButton = Instance.new("TextButton")
+ESPButton.Size = UDim2.new(0.9, 0, 0, 40)
+ESPButton.Position = UDim2.new(0.05, 0, 0, 100)
+ESPButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+ESPButton.Text = "👁️ ESP: OFF"
+ESPButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ESPButton.TextSize = 16
+ESPButton.Font = Enum.Font.GothamBold
+ESPButton.Parent = MainFrame
+ESPButton.AutoButtonColor = false
+
+local ESPCorner = Instance.new("UICorner")
+ESPCorner.CornerRadius = UDim.new(0, 8)
+ESPCorner.Parent = ESPButton
+
 -- Smoothness Control
 local SmoothnessFrame = Instance.new("Frame")
 SmoothnessFrame.Size = UDim2.new(0.9, 0, 0, 70)
-SmoothnessFrame.Position = UDim2.new(0.05, 0, 0, 105)
+SmoothnessFrame.Position = UDim2.new(0.05, 0, 0, 145)
 SmoothnessFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 SmoothnessFrame.Parent = MainFrame
 
@@ -137,7 +154,7 @@ SmoothnessSliderCorner.Parent = SmoothnessSlider
 -- Player List Label
 local ListLabel = Instance.new("TextLabel")
 ListLabel.Size = UDim2.new(1, -20, 0, 25)
-ListLabel.Position = UDim2.new(0, 10, 0, 185)
+ListLabel.Position = UDim2.new(0, 10, 0, 225)
 ListLabel.BackgroundTransparency = 1
 ListLabel.Text = "👥 SELECT TARGET:"
 ListLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
@@ -149,7 +166,7 @@ ListLabel.Parent = MainFrame
 -- Scroll Frame for Player List
 local ScrollFrame = Instance.new("ScrollingFrame")
 ScrollFrame.Size = UDim2.new(0.9, 0, 0, 160)
-ScrollFrame.Position = UDim2.new(0.05, 0, 0, 215)
+ScrollFrame.Position = UDim2.new(0.05, 0, 0, 255)
 ScrollFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 6
@@ -173,7 +190,7 @@ UIPadding.Parent = ScrollFrame
 -- Status Label
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(0.9, 0, 0, 40)
-StatusLabel.Position = UDim2.new(0.05, 0, 0, 385)
+StatusLabel.Position = UDim2.new(0.05, 0, 0, 425)
 StatusLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 StatusLabel.Text = "⏳ Status: No target selected"
 StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
@@ -185,7 +202,247 @@ local StatusCorner = Instance.new("UICorner")
 StatusCorner.CornerRadius = UDim.new(0, 8)
 StatusCorner.Parent = StatusLabel
 
--- Functions
+-- ESP Status Label (kecil di bawah status)
+local ESPStatusLabel = Instance.new("TextLabel")
+ESPStatusLabel.Size = UDim2.new(0.9, 0, 0, 20)
+ESPStatusLabel.Position = UDim2.new(0.05, 0, 0, 470)
+ESPStatusLabel.BackgroundTransparency = 1
+ESPStatusLabel.Text = "ESP: OFF"
+ESPStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+ESPStatusLabel.TextSize = 11
+ESPStatusLabel.Font = Enum.Font.Gotham
+ESPStatusLabel.Parent = MainFrame
+
+-- ================== ESP SYSTEM ==================
+local ESPHolder = Instance.new("Folder")
+ESPHolder.Name = "ESPHolder"
+ESPHolder.Parent = ScreenGui
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+    
+    -- Hapus ESP lama jika ada
+    local existing = ESPHolder:FindFirstChild(player.Name)
+    if existing then existing:Destroy() end
+    
+    -- Buat BillboardGui
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = player.Name
+    billboard.Adornee = player.Character and player.Character:FindFirstChild("Head") or nil
+    billboard.Size = UDim2.new(0, 200, 0, 80)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Enabled = _G.espEnabled
+    billboard.Parent = ESPHolder
+    
+    -- Background
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    bg.BackgroundTransparency = 0.3
+    bg.BorderSizePixel = 0
+    bg.Parent = billboard
+    
+    local bgCorner = Instance.new("UICorner")
+    bgCorner.CornerRadius = UDim.new(0, 5)
+    bgCorner.Parent = bg
+    
+    -- Nama player
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0, 25)
+    nameLabel.Position = UDim2.new(0, 0, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.Name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextSize = 16
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Parent = bg
+    
+    -- Health bar background
+    local healthBg = Instance.new("Frame")
+    healthBg.Size = UDim2.new(0.9, 0, 0, 10)
+    healthBg.Position = UDim2.new(0.05, 0, 0, 30)
+    healthBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    healthBg.BorderSizePixel = 0
+    healthBg.Parent = bg
+    
+    local healthBgCorner = Instance.new("UICorner")
+    healthBgCorner.CornerRadius = UDim.new(0, 3)
+    healthBgCorner.Parent = healthBg
+    
+    -- Health bar fill
+    local healthBar = Instance.new("Frame")
+    healthBar.Name = "HealthBar"
+    healthBar.Size = UDim2.new(1, 0, 1, 0)
+    healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    healthBar.BorderSizePixel = 0
+    healthBar.Parent = healthBg
+    
+    local healthBarCorner = Instance.new("UICorner")
+    healthBarCorner.CornerRadius = UDim.new(0, 3)
+    healthBarCorner.Parent = healthBar
+    
+    -- Health text
+    local healthText = Instance.new("TextLabel")
+    healthText.Name = "HealthText"
+    healthText.Size = UDim2.new(1, 0, 0, 15)
+    healthText.Position = UDim2.new(0, 0, 0, 45)
+    healthText.BackgroundTransparency = 1
+    healthText.Text = "100/100"
+    healthText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    healthText.TextSize = 12
+    healthText.Font = Enum.Font.Gotham
+    healthText.Parent = bg
+    
+    -- Jarak (studs)
+    local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Name = "DistanceLabel"
+    distanceLabel.Size = UDim2.new(1, 0, 0, 15)
+    distanceLabel.Position = UDim2.new(0, 0, 0, 60)
+    distanceLabel.BackgroundTransparency = 1
+    distanceLabel.Text = "0 studs"
+    distanceLabel.TextColor3 = Color3.fromRGB(200, 200, 0)
+    distanceLabel.TextSize = 11
+    distanceLabel.Font = Enum.Font.Gotham
+    distanceLabel.Parent = bg
+    
+    -- Update fungsi untuk ESP
+    local function updateESP()
+        if not _G.espEnabled or not player.Character or not player.Character:FindFirstChild("Head") then
+            billboard.Enabled = false
+            return
+        end
+        
+        billboard.Enabled = true
+        billboard.Adornee = player.Character.Head
+        
+        -- Update health
+        local humanoid = player.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            local health = humanoid.Health
+            local maxHealth = humanoid.MaxHealth
+            local percent = math.clamp(health / maxHealth, 0, 1)
+            healthBar.Size = UDim2.new(percent, 0, 1, 0)
+            
+            -- Warna health bar berdasarkan persentase
+            if percent > 0.6 then
+                healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            elseif percent > 0.3 then
+                healthBar.BackgroundColor3 = Color3.fromRGB(255, 255, 0)
+            else
+                healthBar.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            end
+            
+            healthText.Text = string.format("%.0f/%.0f", health, maxHealth)
+        end
+        
+        -- Update jarak
+        local localChar = LocalPlayer.Character
+        if localChar and localChar:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("HumanoidRootPart") then
+            local dist = (localChar.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+            distanceLabel.Text = string.format("%.1f studs", dist)
+        end
+    end
+    
+    -- Hubungkan update ke RenderStepped (akan dilakukan secara terpusat nanti)
+    -- Simpan fungsi update di billboard untuk dipanggil nanti
+    billboard.UpdateESP = updateESP
+end
+
+-- Fungsi untuk menghapus ESP player
+local function removeESP(player)
+    local esp = ESPHolder:FindFirstChild(player.Name)
+    if esp then
+        esp:Destroy()
+    end
+end
+
+-- Update semua ESP (dipanggil setiap frame)
+local function updateAllESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local esp = ESPHolder:FindFirstChild(player.Name)
+            if esp then
+                if _G.espEnabled and player.Character then
+                    esp.UpdateESP()
+                else
+                    esp.Enabled = false
+                end
+            elseif _G.espEnabled and player.Character then
+                -- Buat ESP jika belum ada
+                createESP(player)
+            end
+        end
+    end
+end
+
+-- Toggle ESP
+ESPButton.MouseButton1Click:Connect(function()
+    _G.espEnabled = not _G.espEnabled
+    
+    if _G.espEnabled then
+        ESPButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+        ESPButton.Text = "👁️ ESP: ON"
+        ESPStatusLabel.Text = "ESP: ON"
+        ESPStatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        
+        -- Buat ESP untuk semua player yang sudah ada
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                createESP(player)
+            end
+        end
+    else
+        ESPButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        ESPButton.Text = "👁️ ESP: OFF"
+        ESPStatusLabel.Text = "ESP: OFF"
+        ESPStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        
+        -- Hapus semua ESP
+        for _, child in pairs(ESPHolder:GetChildren()) do
+            child:Destroy()
+        end
+    end
+end)
+
+-- Smoothness input handler
+SmoothnessSlider.FocusLost:Connect(function(enterPressed)
+    local value = tonumber(SmoothnessSlider.Text)
+    if value then
+        _G.aimSmoothness = math.clamp(value, 0.05, 1)
+        SmoothnessSlider.Text = string.format("%.2f", _G.aimSmoothness)
+        SmoothnessLabel.Text = "Smoothness: " .. string.format("%.2f", _G.aimSmoothness)
+    else
+        SmoothnessSlider.Text = string.format("%.2f", _G.aimSmoothness)
+    end
+end)
+
+-- Toggle Aimlock
+ToggleButton.MouseButton1Click:Connect(function()
+    _G.aimlockEnabled = not _G.aimlockEnabled
+    
+    if _G.aimlockEnabled then
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(70, 255, 70)
+        ToggleButton.Text = "⚡ AIMLOCK: ON"
+        
+        if not _G.selectedTarget then
+            StatusLabel.Text = "⚠️ Warning: No target selected!"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+        elseif not isValidTarget(_G.selectedTarget) then
+            StatusLabel.Text = "⚠️ Target invalid! Select new target"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+            _G.selectedTarget = nil
+            updatePlayerList()
+        end
+    else
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+        ToggleButton.Text = "⚡ AIMLOCK: OFF"
+        StatusLabel.Text = "⏸️ Aimlock disabled"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end)
+
+-- Fungsi update player list (sama seperti sebelumnya, tapi sekarang dengan informasi ESP)
 local function updatePlayerList()
     -- Clear existing buttons
     for _, child in pairs(ScrollFrame:GetChildren()) do
@@ -290,43 +547,6 @@ local function updatePlayerList()
     ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, UIListLayout.AbsoluteContentSize.Y + 15)
 end
 
--- Smoothness input handler
-SmoothnessSlider.FocusLost:Connect(function(enterPressed)
-    local value = tonumber(SmoothnessSlider.Text)
-    if value then
-        _G.aimSmoothness = math.clamp(value, 0.05, 1)
-        SmoothnessSlider.Text = string.format("%.2f", _G.aimSmoothness)
-        SmoothnessLabel.Text = "Smoothness: " .. string.format("%.2f", _G.aimSmoothness)
-    else
-        SmoothnessSlider.Text = string.format("%.2f", _G.aimSmoothness)
-    end
-end)
-
--- Toggle Aimlock
-ToggleButton.MouseButton1Click:Connect(function()
-    _G.aimlockEnabled = not _G.aimlockEnabled
-    
-    if _G.aimlockEnabled then
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(70, 255, 70)
-        ToggleButton.Text = "⚡ AIMLOCK: ON"
-        
-        if not _G.selectedTarget then
-            StatusLabel.Text = "⚠️ Warning: No target selected!"
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-        elseif not isValidTarget(_G.selectedTarget) then
-            StatusLabel.Text = "⚠️ Target invalid! Select new target"
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-            _G.selectedTarget = nil
-            updatePlayerList()
-        end
-    else
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
-        ToggleButton.Text = "⚡ AIMLOCK: OFF"
-        StatusLabel.Text = "⏸️ Aimlock disabled"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    end
-end)
-
 -- Aimlock Logic dengan optimasi
 local aimlockConnection
 aimlockConnection = RunService.RenderStepped:Connect(function()
@@ -336,17 +556,16 @@ aimlockConnection = RunService.RenderStepped:Connect(function()
         return
     end
     
+    -- Aimlock
     if _G.aimlockEnabled and _G.selectedTarget then
         local target = _G.selectedTarget
         
-        -- Validasi target
         if isValidTarget(target) then
             local targetPart = target.Character[_G.aimPart]
             local targetPosition = targetPart.Position
             local cameraCFrame = Camera.CFrame
             local targetCFrame = CFrame.new(cameraCFrame.Position, targetPosition)
             
-            -- Smooth camera movement dengan lerp
             Camera.CFrame = cameraCFrame:Lerp(targetCFrame, _G.aimSmoothness)
         else
             StatusLabel.Text = "❌ Target lost! Select new target"
@@ -354,7 +573,6 @@ aimlockConnection = RunService.RenderStepped:Connect(function()
             _G.selectedTarget = nil
             updatePlayerList()
             
-            -- Auto-disable aimlock jika target hilang
             if _G.aimlockEnabled then
                 _G.aimlockEnabled = false
                 ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
@@ -362,6 +580,9 @@ aimlockConnection = RunService.RenderStepped:Connect(function()
             end
         end
     end
+    
+    -- Update ESP setiap frame
+    updateAllESP()
 end)
 
 -- Hotkey to toggle (Q key)
@@ -372,9 +593,12 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- Update player list when players join/leave
-Players.PlayerAdded:Connect(function()
+Players.PlayerAdded:Connect(function(player)
     task.wait(0.5)
     updatePlayerList()
+    if _G.espEnabled then
+        createESP(player)
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(player)
@@ -383,6 +607,7 @@ Players.PlayerRemoving:Connect(function(player)
         StatusLabel.Text = "👋 Target left! Select new target"
         StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
     end
+    removeESP(player)
     updatePlayerList()
 end)
 
@@ -438,7 +663,6 @@ local CloseCorner = Instance.new("UICorner")
 CloseCorner.CornerRadius = UDim.new(1, 0)
 CloseCorner.Parent = CloseButton
 
--- Hover effect for close button
 CloseButton.MouseEnter:Connect(function()
     CloseButton.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
 end)
@@ -470,7 +694,6 @@ local MinCorner = Instance.new("UICorner")
 MinCorner.CornerRadius = UDim.new(1, 0)
 MinCorner.Parent = MinimizeButton
 
--- Hover effect for minimize button
 MinimizeButton.MouseEnter:Connect(function()
     MinimizeButton.BackgroundColor3 = Color3.fromRGB(255, 185, 0)
 end)
@@ -485,10 +708,12 @@ MinimizeButton.MouseButton1Click:Connect(function()
     if minimized then
         -- Hide all content except title and buttons
         ToggleButton.Visible = false
+        ESPButton.Visible = false
         SmoothnessFrame.Visible = false
         ListLabel.Visible = false
         ScrollFrame.Visible = false
         StatusLabel.Visible = false
+        ESPStatusLabel.Visible = false
         
         MainFrame.Size = UDim2.new(0, 320, 0, 45)
         MinimizeButton.Text = "+"
@@ -497,12 +722,14 @@ MinimizeButton.MouseButton1Click:Connect(function()
     else
         -- Show all content
         ToggleButton.Visible = true
+        ESPButton.Visible = true
         SmoothnessFrame.Visible = true
         ListLabel.Visible = true
         ScrollFrame.Visible = true
         StatusLabel.Visible = true
+        ESPStatusLabel.Visible = true
         
-        MainFrame.Size = UDim2.new(0, 320, 0, 450)
+        MainFrame.Size = UDim2.new(0, 320, 0, 520)
         MinimizeButton.Text = "—"
         CloseButton.Position = UDim2.new(1, -42, 0, 6)
         MinimizeButton.Position = UDim2.new(1, -84, 0, 6)
@@ -516,7 +743,7 @@ updatePlayerList()
 local function notify(text, duration, icon)
     duration = duration or 3
     game.StarterGui:SetCore("SendNotification", {
-        Title = "🎯 AIMLOCK SYSTEM",
+        Title = "🎯 AIMLOCK + ESP",
         Text = text,
         Icon = icon or "rbxassetid://7734057515",
         Duration = duration
@@ -525,11 +752,11 @@ end
 
 -- Welcome notifications
 task.wait(0.5)
-notify("Aimlock GUI loaded! Press Q to toggle aimlock", 2)
+notify("Aimlock + ESP loaded! Press Q to toggle aimlock", 2)
 task.wait(0.5)
-notify("Select a target from the list", 2)
+notify("ESP button to see names, health, distance", 2)
 task.wait(0.5)
-notify("Adjust smoothness with slider", 2)
+notify("Select target from list", 2)
 
 -- Auto-refresh player list setiap 5 detik
 task.spawn(function()
