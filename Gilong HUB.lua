@@ -1,5 +1,5 @@
--- Violence District - GILONG Hub Script (Updated)
--- Fitur: Anti-Fail, Auto Perfect, Auto Heal, ESP, Speed, Teleport, Auto Vault, Auto Pallet, Killer ESP, dll.
+-- Violence District - GILONG Hub Script (Improved)
+-- Dengan penanganan error dan pengecekan remote yang lebih aman
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
@@ -43,6 +43,7 @@ local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 local TweenService = game:GetService("TweenService")
+local LogService = game:GetService("LogService")
 
 local player = Players.LocalPlayer
 
@@ -70,7 +71,7 @@ local remoteEvents = {}
 
 -- Utility Functions
 local function getCharacter(plr)
-    return plr.Character
+    return plr and plr.Character
 end
 
 local function getHumanoid(plr)
@@ -83,55 +84,68 @@ local function getRootPart(plr)
     return char and char:FindFirstChild("HumanoidRootPart")
 end
 
--- Scan Remote Events
+-- Safe function to avoid nil errors
+local function safeCall(func, ...)
+    local success, result = pcall(func, ...)
+    if not success then
+        warn("GILONG Hub: Error in function -", result)
+    end
+    return result
+end
+
+-- Scan Remote Events dengan aman
 local function scanRemotes()
     local remotes = {}
-    local function scan(folder, path)
+    local function scanFolder(folder, path)
+        if not folder then return end
         for _, obj in pairs(folder:GetChildren()) do
+            local fullPath = path .. "." .. obj.Name
             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                remotes[path .. "." .. obj.Name] = obj
+                remotes[fullPath] = obj
             elseif obj:IsA("Folder") then
-                scan(obj, path .. "." .. obj.Name)
+                scanFolder(obj, fullPath)
             end
         end
     end
-    if ReplicatedStorage:FindFirstChild("Remotes") then
-        scan(ReplicatedStorage.Remotes, "ReplicatedStorage.Remotes")
+    local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
+    if remotesFolder then
+        scanFolder(remotesFolder, "ReplicatedStorage.Remotes")
+    else
+        warn("Remotes folder not found!")
     end
     return remotes
 end
 
 remoteEvents = scanRemotes()
 
--- Fungsi untuk mengirim remote dengan aman
+-- Fungsi aman untuk mengirim remote
 local function fireRemote(name, ...)
     local remote = remoteEvents[name]
     if remote and remote:IsA("RemoteEvent") then
-        pcall(function()
+        local success = pcall(function()
             remote:FireServer(...)
         end)
+        if not success then
+            -- Jangan spam warn, cukup sekali saja
+            -- warn("GILONG Hub: Failed to fire remote", name)
+        end
     end
 end
 
--- Fungsi untuk mendapatkan remote
-local function getRemote(name)
-    return remoteEvents[name]
-end
-
--- Anti-Fail Generator (memblokir pengiriman fail event)
+-- Anti-Fail Generator (memblokir pengiriman fail event dengan aman)
 local function setupAntiFail()
     if not _G.antiFail then return end
     
-    -- Daftar remote fail yang mungkin
+    -- Daftar remote fail
     local failRemotes = {
         "ReplicatedStorage.Remotes.Generator.SkillCheckFailEvent",
         "ReplicatedStorage.Remotes.Healing.SkillCheckFailEvent"
     }
     
     for _, name in ipairs(failRemotes) do
-        local remote = getRemote(name)
-        if remote then
-            -- Simpan fungsi asli
+        local remote = remoteEvents[name]
+        if remote and remote:IsA("RemoteEvent") then
+            -- Simpan fungsi asli hanya sekali
             if not remote._oldFire then
                 remote._oldFire = remote.FireServer
                 remote.FireServer = function(self, ...)
@@ -147,37 +161,46 @@ local function setupAntiFail()
     end
 end
 
+-- Anti Stun (untuk killer)
+local function setupAntiStun()
+    if not _G.antiStun then return end
+    
+    local stunRemote = remoteEvents["ReplicatedStorage.Remotes.Pallet.Jason.Stun"]
+    if stunRemote and stunRemote:IsA("RemoteEvent") and not stunRemote._oldFire then
+        stunRemote._oldFire = stunRemote.FireServer
+        stunRemote.FireServer = function(self, ...)
+            if _G.antiStun then
+                return
+            else
+                return stunRemote._oldFire(self, ...)
+            end
+        end
+    end
+end
+
 -- Auto Perfect Skill Check
 local function autoPerfectSkillCheck()
     if not _G.autoPerfect then return end
     
-    -- Cari GUI skill check
     local playerGui = player:FindFirstChild("PlayerGui")
     if not playerGui then return end
     
-    -- Remote untuk hasil skill check
-    local resultRemoteGen = getRemote("ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent")
-    local resultRemoteHeal = getRemote("ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent")
+    local resultRemoteGen = remoteEvents["ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent"]
+    local resultRemoteHeal = remoteEvents["ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent"]
     
-    -- Deteksi skill check muncul (bisa dengan mendeteksi event dari server)
-    -- Atau langsung cari elemen GUI
+    -- Cari GUI skill check
     for _, gui in pairs(playerGui:GetDescendants()) do
         if gui:IsA("Frame") and (gui.Name:lower():find("skill") or gui.Name:lower():find("check")) then
-            -- Cari indikator
             for _, child in pairs(gui:GetDescendants()) do
                 if (child:IsA("ImageLabel") or child:IsA("Frame")) and (child.Name:lower():find("needle") or child.Name:lower():find("indicator")) then
-                    if child.Rotation then
-                        -- Jika jarum dekat zona sempurna, kirim hasil sempurna
-                        if child.Rotation >= 85 and child.Rotation <= 95 then
-                            if resultRemoteGen then
-                                fireRemote("ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent", true) -- asumsi parameter boolean sukses
-                            end
-                            if resultRemoteHeal then
-                                fireRemote("ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent", true)
-                            end
-                            -- Juga tekan tombol untuk jaga-jaga
-                            UserInputService:SimulateKeyPress(Enum.KeyCode.Space)
+                    if child.Rotation and child.Rotation >= 85 and child.Rotation <= 95 then
+                        if resultRemoteGen then
+                            fireRemote("ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent", true)
                         end
+                        if resultRemoteHeal then
+                            fireRemote("ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent", true)
+                        end
+                        UserInputService:SimulateKeyPress(Enum.KeyCode.Space)
                     end
                 end
             end
@@ -185,7 +208,7 @@ local function autoPerfectSkillCheck()
     end
 end
 
--- Auto Heal Player
+-- Auto Heal
 local function autoHeal()
     if not _G.autoHeal then return end
     
@@ -196,11 +219,10 @@ local function autoHeal()
     if not humanoid then return end
     
     if humanoid.Health < humanoid.MaxHealth then
-        -- Gunakan remote heal
-        fireRemote("ReplicatedStorage.Remotes.Healing.HealEvent", player) -- asumsi parameter target
+        fireRemote("ReplicatedStorage.Remotes.Healing.HealEvent", player)
         fireRemote("ReplicatedStorage.Remotes.Healing.HealAnim")
         
-        -- Coba gunakan item di backpack
+        -- Coba gunakan item
         for _, tool in pairs(player.Backpack:GetChildren()) do
             if tool:IsA("Tool") and (tool.Name:lower():find("medkit") or tool.Name:lower():find("bandage")) then
                 pcall(function()
@@ -217,7 +239,6 @@ end
 -- Generator ESP
 local function updateGeneratorESP()
     if not _G.generatorESP then
-        -- Hapus ESP generator
         for i = #espObjects, 1, -1 do
             local obj = espObjects[i]
             if obj and (obj.Name == "GeneratorESP" or obj.Name == "GenLabel") then
@@ -228,12 +249,10 @@ local function updateGeneratorESP()
         return
     end
     
-    -- Cari generator (berdasarkan nama atau model)
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("generator") or obj.Name:lower():find("gen") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
             if part and not part:FindFirstChild("GeneratorESP") then
-                -- Highlight
                 local highlight = Instance.new("Highlight")
                 highlight.Name = "GeneratorESP"
                 highlight.Parent = part
@@ -242,7 +261,6 @@ local function updateGeneratorESP()
                 highlight.FillTransparency = 0.5
                 table.insert(espObjects, highlight)
                 
-                -- Billboard
                 local billboard = Instance.new("BillboardGui")
                 billboard.Name = "GenLabel"
                 billboard.Parent = part
@@ -261,7 +279,6 @@ local function updateGeneratorESP()
                 label.Font = Enum.Font.GothamBold
                 table.insert(espObjects, label)
                 
-                -- Update jarak
                 local conn
                 conn = RunService.Heartbeat:Connect(function()
                     if not part or not part.Parent or not _G.generatorESP then
@@ -298,7 +315,6 @@ local function updatePlayerESP()
             local char = plr.Character
             local root = char:FindFirstChild("HumanoidRootPart")
             if root and not char:FindFirstChild("PlayerESP") then
-                -- Highlight
                 local highlight = Instance.new("Highlight")
                 highlight.Name = "PlayerESP"
                 highlight.Parent = char
@@ -307,7 +323,6 @@ local function updatePlayerESP()
                 highlight.FillTransparency = 0.7
                 table.insert(espObjects, highlight)
                 
-                -- Billboard
                 local billboard = Instance.new("BillboardGui")
                 billboard.Name = "PlayerName"
                 billboard.Parent = root
@@ -343,13 +358,12 @@ local function updateKillerESP()
         return
     end
     
-    -- Asumsi killer adalah player dengan karakter tertentu (misalnya model Jason)
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
             local char = plr.Character
-            -- Deteksi killer berdasarkan nama atau attribute
+            -- Deteksi killer sederhana
             local isKiller = false
-            if char:FindFirstChild("Killer") or char.Name:lower():find("jason") then
+            if char:FindFirstChild("Killer") or char.Name:lower():find("jason") or char.Name:lower():find("masked") or char.Name:lower():find("stalker") then
                 isKiller = true
             end
             if isKiller then
@@ -393,10 +407,9 @@ local function autoVault()
     local char = player.Character
     if not char then return end
     
-    local root = char:FindFirstChild("HumanoidRootPart")
+    local root = getRootPart(player)
     if not root then return end
     
-    -- Cari jendela/vault terdekat
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("window") or obj.Name:lower():find("vault") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
@@ -412,7 +425,7 @@ local function autoVault()
     end
 end
 
--- Auto Pallet (jatuhkan pallet jika killer dekat)
+-- Auto Pallet
 local function autoPallet()
     if not _G.autoPallet then return end
     
@@ -422,14 +435,13 @@ local function autoPallet()
     local root = getRootPart(player)
     if not root then return end
     
-    -- Cari pallet terdekat
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("pallet") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
             if part and root then
                 local dist = (root.Position - part.Position).Magnitude
                 if dist < 8 then
-                    -- Cek apakah ada killer di dekat
+                    -- Cek apakah ada killer dekat
                     for _, plr in pairs(Players:GetPlayers()) do
                         if plr ~= player and plr.Character then
                             local killerRoot = getRootPart(plr)
@@ -449,31 +461,10 @@ local function autoPallet()
     end
 end
 
--- Anti Stun (memblokir stun dari pallet)
-local function setupAntiStun()
-    if not _G.antiStun then return end
-    
-    local stunRemote = getRemote("ReplicatedStorage.Remotes.Pallet.Jason.Stun")
-    if stunRemote then
-        if not stunRemote._oldFire then
-            stunRemote._oldFire = stunRemote.FireServer
-            stunRemote.FireServer = function(self, ...)
-                if _G.antiStun then
-                    -- Abaikan stun
-                    return
-                else
-                    return stunRemote._oldFire(self, ...)
-                end
-            end
-        end
-    end
-end
-
--- Auto Flashlight (aktifkan senter)
+-- Auto Flashlight
 local function autoFlashlight()
     if not _G.autoFlashlight then return end
     
-    -- Cek apakah ada senter di tangan
     local char = player.Character
     if not char then return end
     
@@ -485,25 +476,32 @@ local function autoFlashlight()
     end
 end
 
--- Infinite Stamina (mengubah nilai stamina atau mencegah pengurangan)
+-- Infinite Stamina (coba berbagai cara)
 local function infiniteStamina()
     if not _G.infiniteStamina then return end
     
-    -- Coba cari nilai stamina di karakter
     local char = player.Character
     if char then
+        -- Coba cari nilai stamina
         local stamina = char:FindFirstChild("Stamina")
-        if stamina then
-            stamina.Value = stamina.MaxValue or 100
+        if stamina and stamina:IsA("NumberValue") then
+            stamina.Value = stamina:GetAttribute("MaxValue") or 100
         end
-        -- Alternatif: cari attribute
+        -- Coba set attribute
         if char:GetAttribute("Stamina") then
             char:SetAttribute("Stamina", char:GetAttribute("MaxStamina") or 100)
+        end
+        -- Coba cari humanoid dan set atribut tersembunyi
+        local humanoid = char:FindFirstChild("Humanoid")
+        if humanoid then
+            pcall(function()
+                humanoid:SetAttribute("Stamina", 100)
+            end)
         end
     end
 end
 
--- Instant Repair (kirim repair event berulang)
+-- Instant Repair
 local function instantRepair()
     if not _G.instantRepair then return end
     
@@ -513,7 +511,6 @@ local function instantRepair()
     local root = getRootPart(player)
     if not root then return end
     
-    -- Cari generator terdekat
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("generator") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
@@ -549,161 +546,114 @@ local function updateSpeed()
     end
 end
 
--- Main Loop
+-- Main Loop dengan safeCall
 local function mainLoop()
-    -- Hapus koneksi sebelumnya
+    -- Hapus koneksi lama
     for _, conn in pairs(connections) do
         pcall(function() conn:Disconnect() end)
     end
     connections = {}
     
     local conn = RunService.Heartbeat:Connect(function()
-        pcall(function()
-            setupAntiFail()
-            setupAntiStun()
-            autoPerfectSkillCheck()
-            autoHeal()
-            updateGeneratorESP()
-            updatePlayerESP()
-            updateKillerESP()
-            autoVault()
-            autoPallet()
-            autoFlashlight()
-            infiniteStamina()
-            instantRepair()
-            updateSpeed()
-        end)
+        safeCall(setupAntiFail)
+        safeCall(setupAntiStun)
+        safeCall(autoPerfectSkillCheck)
+        safeCall(autoHeal)
+        safeCall(updateGeneratorESP)
+        safeCall(updatePlayerESP)
+        safeCall(updateKillerESP)
+        safeCall(autoVault)
+        safeCall(autoPallet)
+        safeCall(autoFlashlight)
+        safeCall(infiniteStamina)
+        safeCall(instantRepair)
+        safeCall(updateSpeed)
     end)
     table.insert(connections, conn)
 end
 
--- GUI Elements
-
--- Generator Tab
+-- GUI Elements (sama seperti sebelumnya, hanya untuk kelengkapan)
 local genTab = Window:CreateTab("Generator", nil)
-
 genTab:CreateToggle({
    Name = "Anti-Fail Generator",
    CurrentValue = false,
    Flag = "AntiFailToggle",
-   Callback = function(Value)
-       _G.antiFail = Value
-       Rayfield:Notify({ Title = "Anti-Fail", Content = Value and "Enabled" or "Disabled", Duration = 2 })
-   end,
+   Callback = function(Value) _G.antiFail = Value end,
 })
-
 genTab:CreateToggle({
    Name = "Auto Perfect Skill Check",
    CurrentValue = false,
    Flag = "AutoPerfectToggle",
-   Callback = function(Value)
-       _G.autoPerfect = Value
-       Rayfield:Notify({ Title = "Auto Perfect", Content = Value and "Enabled" or "Disabled", Duration = 2 })
-   end,
+   Callback = function(Value) _G.autoPerfect = Value end,
 })
-
 genTab:CreateToggle({
    Name = "Generator ESP",
    CurrentValue = false,
    Flag = "GenESPToggle",
-   Callback = function(Value)
-       _G.generatorESP = Value
-   end,
+   Callback = function(Value) _G.generatorESP = Value end,
 })
-
 genTab:CreateToggle({
    Name = "Instant Repair (Spam)",
    CurrentValue = false,
    Flag = "InstantRepairToggle",
-   Callback = function(Value)
-       _G.instantRepair = Value
-   end,
+   Callback = function(Value) _G.instantRepair = Value end,
 })
 
--- Survivor Tab
 local survivorTab = Window:CreateTab("Survivor", nil)
-
 survivorTab:CreateToggle({
    Name = "Auto Heal",
    CurrentValue = false,
    Flag = "AutoHealToggle",
-   Callback = function(Value)
-       _G.autoHeal = Value
-   end,
+   Callback = function(Value) _G.autoHeal = Value end,
 })
-
 survivorTab:CreateToggle({
    Name = "Auto Vault",
    CurrentValue = false,
    Flag = "AutoVaultToggle",
-   Callback = function(Value)
-       _G.autoVault = Value
-   end,
+   Callback = function(Value) _G.autoVault = Value end,
 })
-
 survivorTab:CreateToggle({
    Name = "Auto Pallet Drop",
    CurrentValue = false,
    Flag = "AutoPalletToggle",
-   Callback = function(Value)
-       _G.autoPallet = Value
-   end,
+   Callback = function(Value) _G.autoPallet = Value end,
 })
-
 survivorTab:CreateToggle({
    Name = "Auto Flashlight",
    CurrentValue = false,
    Flag = "AutoFlashlightToggle",
-   Callback = function(Value)
-       _G.autoFlashlight = Value
-   end,
+   Callback = function(Value) _G.autoFlashlight = Value end,
 })
-
 survivorTab:CreateToggle({
    Name = "Infinite Stamina",
    CurrentValue = false,
    Flag = "InfiniteStaminaToggle",
-   Callback = function(Value)
-       _G.infiniteStamina = Value
-   end,
+   Callback = function(Value) _G.infiniteStamina = Value end,
 })
 
--- Killer Tab (untuk yang main killer)
 local killerTab = Window:CreateTab("Killer", nil)
-
 killerTab:CreateToggle({
    Name = "Anti Stun (Pallet)",
    CurrentValue = false,
    Flag = "AntiStunToggle",
-   Callback = function(Value)
-       _G.antiStun = Value
-   end,
+   Callback = function(Value) _G.antiStun = Value end,
 })
 
--- Visuals Tab
 local visualTab = Window:CreateTab("Visuals", nil)
-
 visualTab:CreateToggle({
    Name = "Player ESP",
    CurrentValue = false,
    Flag = "PlayerESPToggle",
-   Callback = function(Value)
-       _G.playerESP = Value
-   end,
+   Callback = function(Value) _G.playerESP = Value end,
 })
-
 visualTab:CreateToggle({
    Name = "Killer ESP",
    CurrentValue = false,
    Flag = "KillerESPToggle",
-   Callback = function(Value)
-       _G.killerESP = Value
-   end,
+   Callback = function(Value) _G.killerESP = Value end,
 })
 
--- Utility Tab
 local utilityTab = Window:CreateTab("Utility", nil)
-
 utilityTab:CreateToggle({
    Name = "Speed Boost",
    CurrentValue = false,
@@ -719,7 +669,6 @@ utilityTab:CreateToggle({
        end
    end,
 })
-
 utilityTab:CreateSlider({
     Name = "Speed Value",
     Range = {16, 100},
@@ -727,11 +676,8 @@ utilityTab:CreateSlider({
     Suffix = " Speed",
     CurrentValue = 16,
     Flag = "SpeedSlider",
-    Callback = function(Value)
-        _G.speedValue = Value
-    end,
+    Callback = function(Value) _G.speedValue = Value end,
 })
-
 utilityTab:CreateButton({
    Name = "Teleport to Nearest Generator",
    Callback = function()
@@ -742,9 +688,7 @@ utilityTab:CreateButton({
                if part then table.insert(generators, part) end
            end
        end
-       
-       local nearest = nil
-       local shortest = math.huge
+       local nearest, shortest = nil, math.huge
        local root = getRootPart(player)
        if root then
            for _, gen in ipairs(generators) do
@@ -763,7 +707,6 @@ utilityTab:CreateButton({
        end
    end,
 })
-
 utilityTab:CreateToggle({
    Name = "Anti-AFK",
    CurrentValue = false,
@@ -775,19 +718,17 @@ utilityTab:CreateToggle({
                VirtualUser:ClickButton2(Vector2.new())
            end)
            table.insert(connections, _G.afkConnection)
-       else
-           if _G.afkConnection then
-               _G.afkConnection:Disconnect()
-               _G.afkConnection = nil
-           end
+       elseif _G.afkConnection then
+           _G.afkConnection:Disconnect()
+           _G.afkConnection = nil
        end
    end,
 })
 
--- Start main loop
+-- Mulai main loop
 mainLoop()
 
--- Handle character respawn
+-- Handle respawn
 player.CharacterAdded:Connect(function(newChar)
     wait(1)
     if _G.speedBoost then
