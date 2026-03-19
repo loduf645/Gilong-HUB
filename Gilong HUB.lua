@@ -1,8 +1,29 @@
--- Violence District - GILONG Hub Script (Improved)
--- Dengan penanganan error dan pengecekan remote yang lebih aman
+-- Violence District - GILONG Hub Script (Final Fix)
+-- Dengan penanganan error loadstring dan remote yang lebih aman
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- ========== LOAD RAYFIELD DENGAN PENGECEKAN ==========
+local Rayfield
+local success, result = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
 
+if success and result then
+    Rayfield = result
+else
+    warn("GILONG Hub: Gagal memuat Rayfield dari sirius.menu, mencoba URL cadangan...")
+    -- URL cadangan (misalnya dari GitHub raw)
+    success, result = pcall(function()
+        return loadstring(game:HttpGet('https://raw.githubusercontent.com/rayfield-ui/rayfield/main/source.lua'))()
+    end)
+    if success and result then
+        Rayfield = result
+    else
+        warn("GILONG Hub: Tidak dapat memuat Rayfield. Script tidak dapat berjalan.")
+        return
+    end
+end
+
+-- ========== MEMBUAT WINDOW ==========
 local Window = Rayfield:CreateWindow({
    Name = "GILONG Hub",
    Icon = 0,
@@ -43,7 +64,6 @@ local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 local TweenService = game:GetService("TweenService")
-local LogService = game:GetService("LogService")
 
 local player = Players.LocalPlayer
 
@@ -88,7 +108,8 @@ end
 local function safeCall(func, ...)
     local success, result = pcall(func, ...)
     if not success then
-        warn("GILONG Hub: Error in function -", result)
+        -- Hanya tampilkan jika debug diaktifkan (bisa di-comment)
+        -- warn("GILONG Hub: Error in function -", result)
     end
     return result
 end
@@ -111,7 +132,7 @@ local function scanRemotes()
     if remotesFolder then
         scanFolder(remotesFolder, "ReplicatedStorage.Remotes")
     else
-        warn("Remotes folder not found!")
+        warn("Remotes folder not found! Beberapa fitur mungkin tidak berfungsi.")
     end
     return remotes
 end
@@ -122,21 +143,16 @@ remoteEvents = scanRemotes()
 local function fireRemote(name, ...)
     local remote = remoteEvents[name]
     if remote and remote:IsA("RemoteEvent") then
-        local success = pcall(function()
+        pcall(function()
             remote:FireServer(...)
         end)
-        if not success then
-            -- Jangan spam warn, cukup sekali saja
-            -- warn("GILONG Hub: Failed to fire remote", name)
-        end
     end
 end
 
--- Anti-Fail Generator (memblokir pengiriman fail event dengan aman)
+-- Anti-Fail Generator (memblokir pengiriman fail event)
 local function setupAntiFail()
     if not _G.antiFail then return end
     
-    -- Daftar remote fail
     local failRemotes = {
         "ReplicatedStorage.Remotes.Generator.SkillCheckFailEvent",
         "ReplicatedStorage.Remotes.Healing.SkillCheckFailEvent"
@@ -144,17 +160,13 @@ local function setupAntiFail()
     
     for _, name in ipairs(failRemotes) do
         local remote = remoteEvents[name]
-        if remote and remote:IsA("RemoteEvent") then
-            -- Simpan fungsi asli hanya sekali
-            if not remote._oldFire then
-                remote._oldFire = remote.FireServer
-                remote.FireServer = function(self, ...)
-                    if _G.antiFail then
-                        -- Abaikan pengiriman fail
-                        return
-                    else
-                        return remote._oldFire(self, ...)
-                    end
+        if remote and remote:IsA("RemoteEvent") and not remote._oldFire then
+            remote._oldFire = remote.FireServer
+            remote.FireServer = function(self, ...)
+                if _G.antiFail then
+                    return
+                else
+                    return remote._oldFire(self, ...)
                 end
             end
         end
@@ -188,7 +200,6 @@ local function autoPerfectSkillCheck()
     local resultRemoteGen = remoteEvents["ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent"]
     local resultRemoteHeal = remoteEvents["ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent"]
     
-    -- Cari GUI skill check
     for _, gui in pairs(playerGui:GetDescendants()) do
         if gui:IsA("Frame") and (gui.Name:lower():find("skill") or gui.Name:lower():find("check")) then
             for _, child in pairs(gui:GetDescendants()) do
@@ -222,7 +233,6 @@ local function autoHeal()
         fireRemote("ReplicatedStorage.Remotes.Healing.HealEvent", player)
         fireRemote("ReplicatedStorage.Remotes.Healing.HealAnim")
         
-        -- Coba gunakan item
         for _, tool in pairs(player.Backpack:GetChildren()) do
             if tool:IsA("Tool") and (tool.Name:lower():find("medkit") or tool.Name:lower():find("bandage")) then
                 pcall(function()
@@ -476,22 +486,19 @@ local function autoFlashlight()
     end
 end
 
--- Infinite Stamina (coba berbagai cara)
+-- Infinite Stamina
 local function infiniteStamina()
     if not _G.infiniteStamina then return end
     
     local char = player.Character
     if char then
-        -- Coba cari nilai stamina
         local stamina = char:FindFirstChild("Stamina")
         if stamina and stamina:IsA("NumberValue") then
             stamina.Value = stamina:GetAttribute("MaxValue") or 100
         end
-        -- Coba set attribute
         if char:GetAttribute("Stamina") then
             char:SetAttribute("Stamina", char:GetAttribute("MaxStamina") or 100)
         end
-        -- Coba cari humanoid dan set atribut tersembunyi
         local humanoid = char:FindFirstChild("Humanoid")
         if humanoid then
             pcall(function()
@@ -572,7 +579,7 @@ local function mainLoop()
     table.insert(connections, conn)
 end
 
--- GUI Elements (sama seperti sebelumnya, hanya untuk kelengkapan)
+-- ========== GUI ELEMENTS ==========
 local genTab = Window:CreateTab("Generator", nil)
 genTab:CreateToggle({
    Name = "Anti-Fail Generator",
