@@ -1,11 +1,26 @@
--- Violence District - GILONG Hub (WindUI dengan fallback dan error handling)
+nn in ipairs(connections) do pcall(function() conn:Disconnect() end) end
+-- Violence District - GILONG Hub (WindUI dengan penanganan error total)
 -- Fitur: Generator, Killer, Visuals, Utility (tanpa Survivor & tanpa notifikasi)
 
--- ========== FUNGSI LOAD LIBRARY DENGAN PENGECEKAN KETAT ==========
-local WindUI = nil
-local loadSuccess = false
+-- ========== FUNGSI LOAD LIBRARY DENGAN VALIDASI ==========
+local function safeLoad(url)
+    local success, result = pcall(function()
+        local content = game:HttpGet(url)
+        if content and #content > 0 then
+            local func = loadstring(content)
+            if func then
+                return func()
+            end
+        end
+        return nil
+    end)
+    if success and result and type(result) == "table" then
+        return result
+    end
+    return nil
+end
 
--- Coba beberapa URL
+local WindUI = nil
 local urls = {
     "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/main.client.lua",
     "https://raw.githubusercontent.com/Footagesus/WindUI/main/main.client.lua",
@@ -14,18 +29,12 @@ local urls = {
 }
 
 for _, url in ipairs(urls) do
-    local success, result = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
-    if success and result then
-        WindUI = result
-        loadSuccess = true
-        break
-    end
+    WindUI = safeLoad(url)
+    if WindUI then break end
 end
 
--- Jika semua gagal, buat UI sederhana
-if not loadSuccess then
+-- Jika gagal total, buat UI sederhana
+if not WindUI then
     warn("GILONG Hub: Gagal memuat WindUI. Membuat UI sederhana...")
     
     local screenGui = Instance.new("ScreenGui")
@@ -399,8 +408,8 @@ local function mainLoop()
     table.insert(connections, conn)
 end
 
--- Hanya buat window WindUI jika library berhasil dimuat
-if loadSuccess and WindUI then
+-- Hanya buat window WindUI jika library berhasil dimuat dan memiliki method CreateWindow
+if WindUI and type(WindUI) == "table" and WindUI.CreateWindow then
     local Window = WindUI:CreateWindow({
         Title = "GILONG Hub - Violence District",
         Icon = "skull",
