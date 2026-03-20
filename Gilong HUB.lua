@@ -1,8 +1,8 @@
--- Violence District - GILONG Hub (Orion Library) - Tanpa Notifikasi & Tanpa Pengecekan Load
--- Dengan penanganan error dan fitur lengkap
+-- Violence District - GILONG Hub (WindUI)
+-- Fitur: Generator, Killer, Visuals, Utility (tanpa Survivor & tanpa notifikasi)
 
--- Load Orion Library
-local Orion = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+-- Load WindUI
+local WindUI = loadstring(game:HttpGet('https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/main.client.lua'))()
 
 -- Services
 local Players = game:GetService("Players")
@@ -212,7 +212,7 @@ local function updatePlayerESP()
     end
 end
 
--- Killer ESP (sederhana)
+-- Killer ESP
 local function updateKillerESP()
     if not _G.killerESP then
         for _, obj in ipairs(espObjects) do if obj.Name == "KillerESP" or obj.Name == "KillerName" then pcall(function() obj:Destroy() end) end end
@@ -305,149 +305,95 @@ local function mainLoop()
     table.insert(connections, conn)
 end
 
--- Buat Window Orion
-local Window = OrionLib:MakeWindow({
-    Name = "GILONG Hub - Violence District",
-    HidePremium = false,
-    SaveConfig = false,
-    ConfigFolder = "GILONGHub",
-    IntroEnabled = false
+-- Buat Window WindUI
+local Window = WindUI:CreateWindow({
+    Title = "GILONG Hub - Violence District",
+    Icon = "skull",
+    Author = "GILONG",
+    Folder = "GILONGHub",
+    Size = UDim2.fromOffset(600, 500),
+    Theme = "Dark",
+    Acrylic = false,
+    HideSearchBar = true,
+    SideBarWidth = 180,
 })
 
--- Generator Tab
-local GenTab = Window:MakeTab({
-    Name = "Generator",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-GenTab:AddToggle({
-    Name = "Anti-Fail Generator",
-    Default = false,
-    Callback = function(v) _G.antiFail = v end
-})
-GenTab:AddToggle({
-    Name = "Auto Perfect Skill Check",
-    Default = false,
-    Callback = function(v) _G.autoPerfect = v end
-})
-GenTab:AddToggle({
-    Name = "Generator ESP",
-    Default = false,
-    Callback = function(v) _G.generatorESP = v end
-})
-GenTab:AddToggle({
-    Name = "Instant Repair (Spam)",
-    Default = false,
-    Callback = function(v) _G.instantRepair = v end
-})
+-- Tag versi
+Window:Tag({ Title = "v1.0", Color = Color3.fromHex("#30ff6a") })
 
--- Killer Tab
-local KillerTab = Window:MakeTab({
-    Name = "Killer",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-KillerTab:AddToggle({
-    Name = "Anti Stun (Pallet)",
-    Default = false,
-    Callback = function(v) _G.antiStun = v end
-})
+-- Tab Generator
+local GeneratorTab = Window:Tab({ Title = "Generator", Icon = "zap" })
+local GenSection = GeneratorTab:Section({ Title = "Generator Settings", Opened = true })
+GenSection:Toggle({ Title = "Anti-Fail Generator", Value = false, Callback = function(v) _G.antiFail = v end })
+GenSection:Toggle({ Title = "Auto Perfect Skill Check", Value = false, Callback = function(v) _G.autoPerfect = v end })
+GenSection:Toggle({ Title = "Generator ESP", Value = false, Callback = function(v) _G.generatorESP = v end })
+GenSection:Toggle({ Title = "Instant Repair (Spam)", Value = false, Callback = function(v) _G.instantRepair = v end })
 
--- Visuals Tab
-local VisualTab = Window:MakeTab({
-    Name = "Visuals",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-VisualTab:AddToggle({
-    Name = "Player ESP",
-    Default = false,
-    Callback = function(v) _G.playerESP = v end
-})
-VisualTab:AddToggle({
-    Name = "Killer ESP",
-    Default = false,
-    Callback = function(v) _G.killerESP = v end
-})
+-- Tab Killer
+local KillerTab = Window:Tab({ Title = "Killer", Icon = "sword" })
+local KillerSection = KillerTab:Section({ Title = "Killer Settings", Opened = true })
+KillerSection:Toggle({ Title = "Anti Stun (Pallet)", Value = false, Callback = function(v) _G.antiStun = v end })
 
--- Utility Tab
-local UtilityTab = Window:MakeTab({
-    Name = "Utility",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-UtilityTab:AddToggle({
-    Name = "Speed Boost",
-    Default = false,
-    Callback = function(v)
-        _G.speedBoost = v
-        if not v then
-            local char = player.Character
-            if char then
-                local hum = char:FindFirstChild("Humanoid")
-                if hum then hum.WalkSpeed = 16 end
-            end
+-- Tab Visuals
+local VisualsTab = Window:Tab({ Title = "Visuals", Icon = "eye" })
+local VisualSection = VisualsTab:Section({ Title = "ESP Settings", Opened = true })
+VisualSection:Toggle({ Title = "Player ESP", Value = false, Callback = function(v) _G.playerESP = v end })
+VisualSection:Toggle({ Title = "Killer ESP", Value = false, Callback = function(v) _G.killerESP = v end })
+
+-- Tab Utility
+local UtilityTab = Window:Tab({ Title = "Utility", Icon = "settings" })
+local UtilSection = UtilityTab:Section({ Title = "Utility Settings", Opened = true })
+UtilSection:Toggle({ Title = "Speed Boost", Value = false, Callback = function(v)
+    _G.speedBoost = v
+    if not v then
+        local char = player.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            if hum then hum.WalkSpeed = 16 end
         end
     end
-})
-UtilityTab:AddSlider({
-    Name = "Speed Value",
-    Min = 16,
-    Max = 100,
-    Default = 16,
-    Increment = 2,
-    Callback = function(v) _G.speedValue = v end
-})
-UtilityTab:AddButton({
-    Name = "Teleport to Nearest Generator",
-    Callback = function()
-        local gens = {}
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name:lower():find("generator") then
-                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-                if part then table.insert(gens, part) end
-            end
-        end
-        local nearest, distMin = nil, math.huge
-        local root = getRootPart(player)
-        if root then
-            for _, g in ipairs(gens) do
-                local d = (root.Position - g.Position).Magnitude
-                if d < distMin then
-                    distMin = d
-                    nearest = g
-                end
-            end
-            if nearest then
-                player.Character:SetPrimaryPartCFrame(CFrame.new(nearest.Position + Vector3.new(0,5,0)))
-                -- Notifikasi dihapus
-            else
-                -- Notifikasi dihapus
-            end
+end})
+UtilSection:Slider({ Title = "Speed Value", Value = { Min = 16, Max = 100, Default = 16 }, Callback = function(v) _G.speedValue = v end })
+UtilSection:Button({ Title = "Teleport to Nearest Generator", Callback = function()
+    local gens = {}
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj.Name:lower():find("generator") then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
+            if part then table.insert(gens, part) end
         end
     end
-})
-UtilityTab:AddToggle({
-    Name = "Anti-AFK",
-    Default = false,
-    Callback = function(v)
-        if v then
-            _G.afkConn = RunService.Heartbeat:Connect(function()
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new())
-            end)
-            table.insert(connections, _G.afkConn)
-        elseif _G.afkConn then
-            _G.afkConn:Disconnect()
-            _G.afkConn = nil
+    local nearest, distMin = nil, math.huge
+    local root = getRootPart(player)
+    if root then
+        for _, g in ipairs(gens) do
+            local d = (root.Position - g.Position).Magnitude
+            if d < distMin then
+                distMin = d
+                nearest = g
+            end
+        end
+        if nearest then
+            player.Character:SetPrimaryPartCFrame(CFrame.new(nearest.Position + Vector3.new(0,5,0)))
         end
     end
-})
+end})
+UtilSection:Toggle({ Title = "Anti-AFK", Value = false, Callback = function(v)
+    if v then
+        _G.afkConn = RunService.Heartbeat:Connect(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+        table.insert(connections, _G.afkConn)
+    elseif _G.afkConn then
+        _G.afkConn:Disconnect()
+        _G.afkConn = nil
+    end
+end})
 
--- Inisialisasi
-OrionLib:Init()
+-- Mulai loop utama
 mainLoop()
 
+-- Handle respawn
 player.CharacterAdded:Connect(function()
     wait(1)
     if _G.speedBoost then
