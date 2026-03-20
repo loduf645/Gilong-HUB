@@ -1,8 +1,32 @@
--- Violence District - GILONG Hub (Venyx UI)
--- Dengan penanganan error dan fitur lengkap
+-- Violence District - GILONG Hub (Venyx UI dengan penanganan error loadstring)
 
--- Load Venyx UI Library
-local Venyx = loadstring(game:HttpGet("https://raw.githubusercontent.com/ethan5o/venyx/main/source"))()
+-- ========== LOAD VENYX DENGAN PENGECEKAN ==========
+local Venyx
+local loadSuccess, result = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/ethan5o/venyx/main/source"))()
+end)
+
+if loadSuccess and result then
+    Venyx = result
+else
+    warn("GILONG Hub: Gagal memuat Venyx UI. Mencoba URL cadangan...")
+    -- Coba URL cadangan (misalnya dari GitHub mirror)
+    loadSuccess, result = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/venyx-ui/venyx/main/source.lua"))()
+    end)
+    if loadSuccess and result then
+        Venyx = result
+    else
+        warn("GILONG Hub: Tidak dapat memuat Venyx UI. Script tidak dapat berjalan.")
+        -- Tampilkan notifikasi sederhana jika gagal
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "GILONG Hub Error",
+            Text = "Gagal memuat UI library. Cek koneksi internet atau coba lagi.",
+            Duration = 5
+        })
+        return
+    end
+end
 
 -- Services
 local Players = game:GetService("Players")
