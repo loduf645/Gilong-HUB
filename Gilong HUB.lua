@@ -1,31 +1,15 @@
--- Violence District - GILONG Hub (Venyx UI dengan penanganan error loadstring)
+-- Violence District - GILONG Hub (Orion Library)
+-- Dengan penanganan error dan fitur lengkap
 
--- ========== LOAD VENYX DENGAN PENGECEKAN ==========
-local Venyx
-local loadSuccess, result = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/ethan5o/venyx/main/source"))()
-end)
-
-if loadSuccess and result then
-    Venyx = result
-else
-    warn("GILONG Hub: Gagal memuat Venyx UI. Mencoba URL cadangan...")
-    -- Coba URL cadangan (misalnya dari GitHub mirror)
-    loadSuccess, result = pcall(function()
-        return loadstring(game:HttpGet("https://raw.githubusercontent.com/venyx-ui/venyx/main/source.lua"))()
-    end)
-    if loadSuccess and result then
-        Venyx = result
-    else
-        warn("GILONG Hub: Tidak dapat memuat Venyx UI. Script tidak dapat berjalan.")
-        -- Tampilkan notifikasi sederhana jika gagal
-        game.StarterGui:SetCore("SendNotification", {
-            Title = "GILONG Hub Error",
-            Text = "Gagal memuat UI library. Cek koneksi internet atau coba lagi.",
-            Duration = 5
-        })
-        return
-    end
+-- Load Orion Library dengan pengecekan
+local Orion = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+if not Orion then
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "GILONG Hub Error",
+        Text = "Gagal memuat Orion Library. Cek koneksi atau coba lagi.",
+        Duration = 5
+    })
+    return
 end
 
 -- Services
@@ -35,7 +19,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 
@@ -46,7 +29,6 @@ _G.autoHeal = false
 _G.generatorESP = false
 _G.playerESP = false
 _G.killerESP = false
-_G.itemESP = false
 _G.speedBoost = false
 _G.speedValue = 16
 _G.autoVault = false
@@ -62,49 +44,29 @@ local espObjects = {}
 local remoteEvents = {}
 
 -- Utility Functions
-local function getCharacter(plr)
-    return plr and plr.Character
-end
-
-local function getHumanoid(plr)
-    local char = getCharacter(plr)
-    return char and char:FindFirstChild("Humanoid")
-end
-
 local function getRootPart(plr)
-    local char = getCharacter(plr)
-    return char and char:FindFirstChild("HumanoidRootPart")
+    return plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
 end
 
--- Safe function
 local function safeCall(func, ...)
-    local success, result = pcall(func, ...)
-    if not success then
-        -- Hanya tampilkan jika debug
-    end
-    return result
+    pcall(func, ...)
 end
 
 -- Scan Remote Events
 local function scanRemotes()
     local remotes = {}
-    local function scanFolder(folder, path)
+    local function scan(folder, path)
         if not folder then return end
-        for _, obj in pairs(folder:GetChildren()) do
+        for _, obj in ipairs(folder:GetChildren()) do
             local fullPath = path .. "." .. obj.Name
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            if obj:IsA("RemoteEvent") then
                 remotes[fullPath] = obj
             elseif obj:IsA("Folder") then
-                scanFolder(obj, fullPath)
+                scan(obj, fullPath)
             end
         end
     end
-    local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes")
-    if remotesFolder then
-        scanFolder(remotesFolder, "ReplicatedStorage.Remotes")
-    else
-        warn("Remotes folder not found!")
-    end
+    scan(ReplicatedStorage:FindFirstChild("Remotes"), "ReplicatedStorage.Remotes")
     return remotes
 end
 
@@ -112,10 +74,8 @@ remoteEvents = scanRemotes()
 
 local function fireRemote(name, ...)
     local remote = remoteEvents[name]
-    if remote and remote:IsA("RemoteEvent") then
-        pcall(function()
-            remote:FireServer(...)
-        end)
+    if remote then
+        pcall(function() remote:FireServer(...) end)
     end
 end
 
@@ -128,10 +88,11 @@ local function setupAntiFail()
     }
     for _, name in ipairs(failRemotes) do
         local remote = remoteEvents[name]
-        if remote and remote:IsA("RemoteEvent") and not remote._oldFire then
+        if remote and not remote._oldFire then
             remote._oldFire = remote.FireServer
             remote.FireServer = function(self, ...)
-                if _G.antiFail then return else return remote._oldFire(self, ...) end
+                if _G.antiFail then return end
+                return remote._oldFire(self, ...)
             end
         end
     end
@@ -141,10 +102,11 @@ end
 local function setupAntiStun()
     if not _G.antiStun then return end
     local stunRemote = remoteEvents["ReplicatedStorage.Remotes.Pallet.Jason.Stun"]
-    if stunRemote and stunRemote:IsA("RemoteEvent") and not stunRemote._oldFire then
+    if stunRemote and not stunRemote._oldFire then
         stunRemote._oldFire = stunRemote.FireServer
         stunRemote.FireServer = function(self, ...)
-            if _G.antiStun then return else return stunRemote._oldFire(self, ...) end
+            if _G.antiStun then return end
+            return stunRemote._oldFire(self, ...)
         end
     end
 end
@@ -154,15 +116,15 @@ local function autoPerfectSkillCheck()
     if not _G.autoPerfect then return end
     local playerGui = player:FindFirstChild("PlayerGui")
     if not playerGui then return end
-    local resultRemoteGen = remoteEvents["ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent"]
-    local resultRemoteHeal = remoteEvents["ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent"]
-    for _, gui in pairs(playerGui:GetDescendants()) do
+    local genRemote = remoteEvents["ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent"]
+    local healRemote = remoteEvents["ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent"]
+    for _, gui in ipairs(playerGui:GetDescendants()) do
         if gui:IsA("Frame") and (gui.Name:lower():find("skill") or gui.Name:lower():find("check")) then
-            for _, child in pairs(gui:GetDescendants()) do
-                if (child:IsA("ImageLabel") or child:IsA("Frame")) and (child.Name:lower():find("needle") or child.Name:lower():find("indicator")) then
+            for _, child in ipairs(gui:GetDescendants()) do
+                if child:IsA("ImageLabel") and (child.Name:lower():find("needle") or child.Name:lower():find("indicator")) then
                     if child.Rotation and child.Rotation >= 85 and child.Rotation <= 95 then
-                        if resultRemoteGen then fireRemote("ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent", true) end
-                        if resultRemoteHeal then fireRemote("ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent", true) end
+                        if genRemote then fireRemote("ReplicatedStorage.Remotes.Generator.SkillCheckResultEvent", true) end
+                        if healRemote then fireRemote("ReplicatedStorage.Remotes.Healing.SkillCheckResultEvent", true) end
                         UserInputService:SimulateKeyPress(Enum.KeyCode.Space)
                     end
                 end
@@ -177,11 +139,10 @@ local function autoHeal()
     local char = player.Character
     if not char then return end
     local humanoid = char:FindFirstChild("Humanoid")
-    if not humanoid then return end
-    if humanoid.Health < humanoid.MaxHealth then
+    if humanoid and humanoid.Health < humanoid.MaxHealth then
         fireRemote("ReplicatedStorage.Remotes.Healing.HealEvent", player)
         fireRemote("ReplicatedStorage.Remotes.Healing.HealAnim")
-        for _, tool in pairs(player.Backpack:GetChildren()) do
+        for _, tool in ipairs(player.Backpack:GetChildren()) do
             if tool:IsA("Tool") and (tool.Name:lower():find("medkit") or tool.Name:lower():find("bandage")) then
                 pcall(function() tool.Parent = char wait(0.2) tool:Activate() end)
                 break
@@ -193,16 +154,11 @@ end
 -- Generator ESP
 local function updateGeneratorESP()
     if not _G.generatorESP then
-        for i = #espObjects, 1, -1 do
-            local obj = espObjects[i]
-            if obj and (obj.Name == "GeneratorESP" or obj.Name == "GenLabel") then
-                pcall(function() obj:Destroy() end)
-                table.remove(espObjects, i)
-            end
-        end
+        for _, obj in ipairs(espObjects) do pcall(function() obj:Destroy() end) end
+        espObjects = {}
         return
     end
-    for _, obj in pairs(Workspace:GetDescendants()) do
+    for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("generator") or obj.Name:lower():find("gen") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
             if part and not part:FindFirstChild("GeneratorESP") then
@@ -234,14 +190,10 @@ local function updateGeneratorESP()
                 
                 local conn
                 conn = RunService.Heartbeat:Connect(function()
-                    if not part or not part.Parent or not _G.generatorESP then
-                        conn:Disconnect()
-                        return
-                    end
+                    if not part or not part.Parent or not _G.generatorESP then conn:Disconnect() return end
                     local root = getRootPart(player)
                     if root then
-                        local dist = math.floor((root.Position - part.Position).Magnitude)
-                        label.Text = "GENERATOR\n" .. dist .. "m"
+                        label.Text = "GENERATOR\n" .. math.floor((root.Position - part.Position).Magnitude) .. "m"
                     end
                 end)
                 table.insert(connections, conn)
@@ -253,16 +205,10 @@ end
 -- Player ESP
 local function updatePlayerESP()
     if not _G.playerESP then
-        for i = #espObjects, 1, -1 do
-            local obj = espObjects[i]
-            if obj and (obj.Name == "PlayerESP" or obj.Name == "PlayerName") then
-                pcall(function() obj:Destroy() end)
-                table.remove(espObjects, i)
-            end
-        end
+        for _, obj in ipairs(espObjects) do if obj.Name == "PlayerESP" or obj.Name == "PlayerName" then pcall(function() obj:Destroy() end) end end
         return
     end
-    for _, plr in pairs(Players:GetPlayers()) do
+    for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
             local char = plr.Character
             local root = char:FindFirstChild("HumanoidRootPart")
@@ -297,28 +243,18 @@ local function updatePlayerESP()
     end
 end
 
--- Killer ESP
+-- Killer ESP (sederhana)
 local function updateKillerESP()
     if not _G.killerESP then
-        for i = #espObjects, 1, -1 do
-            local obj = espObjects[i]
-            if obj and (obj.Name == "KillerESP" or obj.Name == "KillerName") then
-                pcall(function() obj:Destroy() end)
-                table.remove(espObjects, i)
-            end
-        end
+        for _, obj in ipairs(espObjects) do if obj.Name == "KillerESP" or obj.Name == "KillerName" then pcall(function() obj:Destroy() end) end end
         return
     end
-    for _, plr in pairs(Players:GetPlayers()) do
+    for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and plr.Character then
             local char = plr.Character
-            local isKiller = false
-            if char:FindFirstChild("Killer") or char.Name:lower():find("jason") or char.Name:lower():find("masked") or char.Name:lower():find("stalker") then
-                isKiller = true
-            end
-            if isKiller then
-                local root = char:FindFirstChild("HumanoidRootPart")
-                if root and not char:FindFirstChild("KillerESP") then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root and (char.Name:lower():find("jason") or char:FindFirstChild("Killer")) then
+                if not char:FindFirstChild("KillerESP") then
                     local highlight = Instance.new("Highlight")
                     highlight.Name = "KillerESP"
                     highlight.Parent = char
@@ -353,20 +289,15 @@ end
 -- Auto Vault
 local function autoVault()
     if not _G.autoVault then return end
-    local char = player.Character
-    if not char then return end
     local root = getRootPart(player)
     if not root then return end
-    for _, obj in pairs(Workspace:GetDescendants()) do
+    for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("window") or obj.Name:lower():find("vault") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-            if part and root then
-                local dist = (root.Position - part.Position).Magnitude
-                if dist < 5 then
-                    fireRemote("ReplicatedStorage.Remotes.Window.VaultEvent", part)
-                    fireRemote("ReplicatedStorage.Remotes.Window.VaultAnim")
-                    break
-                end
+            if part and (root.Position - part.Position).Magnitude < 5 then
+                fireRemote("ReplicatedStorage.Remotes.Window.VaultEvent", part)
+                fireRemote("ReplicatedStorage.Remotes.Window.VaultAnim")
+                break
             end
         end
     end
@@ -375,27 +306,19 @@ end
 -- Auto Pallet
 local function autoPallet()
     if not _G.autoPallet then return end
-    local char = player.Character
-    if not char then return end
     local root = getRootPart(player)
     if not root then return end
-    for _, obj in pairs(Workspace:GetDescendants()) do
+    for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("pallet") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-            if part and root then
-                local dist = (root.Position - part.Position).Magnitude
-                if dist < 8 then
-                    for _, plr in pairs(Players:GetPlayers()) do
-                        if plr ~= player and plr.Character then
-                            local killerRoot = getRootPart(plr)
-                            if killerRoot then
-                                local killerDist = (root.Position - killerRoot.Position).Magnitude
-                                if killerDist < 15 then
-                                    fireRemote("ReplicatedStorage.Remotes.Pallet.PalletDropEvent", part)
-                                    fireRemote("ReplicatedStorage.Remotes.Pallet.PalletDropAnim")
-                                    break
-                                end
-                            end
+            if part and (root.Position - part.Position).Magnitude < 8 then
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= player and plr.Character then
+                        local kRoot = getRootPart(plr)
+                        if kRoot and (root.Position - kRoot.Position).Magnitude < 15 then
+                            fireRemote("ReplicatedStorage.Remotes.Pallet.PalletDropEvent", part)
+                            fireRemote("ReplicatedStorage.Remotes.Pallet.PalletDropAnim")
+                            break
                         end
                     end
                 end
@@ -408,11 +331,12 @@ end
 local function autoFlashlight()
     if not _G.autoFlashlight then return end
     local char = player.Character
-    if not char then return end
-    for _, tool in pairs(char:GetChildren()) do
-        if tool:IsA("Tool") and tool.Name:lower():find("flashlight") then
-            fireRemote("ReplicatedStorage.Remotes.Items.Flashlight.Activate", tool)
-            break
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and tool.Name:lower():find("flashlight") then
+                fireRemote("ReplicatedStorage.Remotes.Items.Flashlight.Activate", tool)
+                break
+            end
         end
     end
 end
@@ -424,14 +348,10 @@ local function infiniteStamina()
     if char then
         local stamina = char:FindFirstChild("Stamina")
         if stamina and stamina:IsA("NumberValue") then
-            stamina.Value = stamina:GetAttribute("MaxValue") or 100
+            stamina.Value = 100
         end
         if char:GetAttribute("Stamina") then
             char:SetAttribute("Stamina", char:GetAttribute("MaxStamina") or 100)
-        end
-        local humanoid = char:FindFirstChild("Humanoid")
-        if humanoid then
-            pcall(function() humanoid:SetAttribute("Stamina", 100) end)
         end
     end
 end
@@ -439,19 +359,14 @@ end
 -- Instant Repair
 local function instantRepair()
     if not _G.instantRepair then return end
-    local char = player.Character
-    if not char then return end
     local root = getRootPart(player)
     if not root then return end
-    for _, obj in pairs(Workspace:GetDescendants()) do
+    for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name:lower():find("generator") then
             local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-            if part and root then
-                local dist = (root.Position - part.Position).Magnitude
-                if dist < 10 then
-                    fireRemote("ReplicatedStorage.Remotes.Generator.RepairEvent", part)
-                    break
-                end
+            if part and (root.Position - part.Position).Magnitude < 10 then
+                fireRemote("ReplicatedStorage.Remotes.Generator.RepairEvent", part)
+                break
             end
         end
     end
@@ -463,28 +378,21 @@ local function updateSpeed()
         local char = player.Character
         if char then
             local humanoid = char:FindFirstChild("Humanoid")
-            if humanoid and humanoid.WalkSpeed ~= _G.speedValue then
-                humanoid.WalkSpeed = _G.speedValue
-            end
+            if humanoid then humanoid.WalkSpeed = _G.speedValue end
         end
     else
         local char = player.Character
         if char then
             local humanoid = char:FindFirstChild("Humanoid")
-            if humanoid and humanoid.WalkSpeed ~= 16 then
-                humanoid.WalkSpeed = 16
-            end
+            if humanoid then humanoid.WalkSpeed = 16 end
         end
     end
 end
 
 -- Main Loop
 local function mainLoop()
-    for _, conn in pairs(connections) do
-        pcall(function() conn:Disconnect() end)
-    end
+    for _, conn in ipairs(connections) do pcall(function() conn:Disconnect() end) end
     connections = {}
-    
     local conn = RunService.Heartbeat:Connect(function()
         safeCall(setupAntiFail)
         safeCall(setupAntiStun)
@@ -503,116 +411,187 @@ local function mainLoop()
     table.insert(connections, conn)
 end
 
--- ========== VENYX UI ==========
-local window = Venyx.new({
-    Title = "GILONG Hub",
-    Subtitle = "Violence District",
-    Theme = "Dark",
-    TabPadding = 8,
-    Size = UDim2.fromOffset(600, 500)
+-- Buat Window Orion
+local Window = OrionLib:MakeWindow({
+    Name = "GILONG Hub - Violence District",
+    HidePremium = false,
+    SaveConfig = false,
+    ConfigFolder = "GILONGHub",
+    IntroEnabled = false
 })
 
 -- Generator Tab
-local genTab = window:addPage("Generator", "rbxassetid://4483345998")
-local genSection = genTab:addSection("Generator Settings")
-
-genSection:addToggle("Anti-Fail", false, function(v) _G.antiFail = v end)
-genSection:addToggle("Auto Perfect Skill Check", false, function(v) _G.autoPerfect = v end)
-genSection:addToggle("Generator ESP", false, function(v) _G.generatorESP = v end)
-genSection:addToggle("Instant Repair (Spam)", false, function(v) _G.instantRepair = v end)
+local GenTab = Window:MakeTab({
+    Name = "Generator",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+GenTab:AddToggle({
+    Name = "Anti-Fail Generator",
+    Default = false,
+    Callback = function(v) _G.antiFail = v end
+})
+GenTab:AddToggle({
+    Name = "Auto Perfect Skill Check",
+    Default = false,
+    Callback = function(v) _G.autoPerfect = v end
+})
+GenTab:AddToggle({
+    Name = "Generator ESP",
+    Default = false,
+    Callback = function(v) _G.generatorESP = v end
+})
+GenTab:AddToggle({
+    Name = "Instant Repair (Spam)",
+    Default = false,
+    Callback = function(v) _G.instantRepair = v end
+})
 
 -- Survivor Tab
-local survivorTab = window:addPage("Survivor", "rbxassetid://4483345998")
-local survivorSection = survivorTab:addSection("Survivor Settings")
-
-survivorSection:addToggle("Auto Heal", false, function(v) _G.autoHeal = v end)
-survivorSection:addToggle("Auto Vault", false, function(v) _G.autoVault = v end)
-survivorSection:addToggle("Auto Pallet Drop", false, function(v) _G.autoPallet = v end)
-survivorSection:addToggle("Auto Flashlight", false, function(v) _G.autoFlashlight = v end)
-survivorSection:addToggle("Infinite Stamina", false, function(v) _G.infiniteStamina = v end)
+local SurvivorTab = Window:MakeTab({
+    Name = "Survivor",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+SurvivorTab:AddToggle({
+    Name = "Auto Heal",
+    Default = false,
+    Callback = function(v) _G.autoHeal = v end
+})
+SurvivorTab:AddToggle({
+    Name = "Auto Vault",
+    Default = false,
+    Callback = function(v) _G.autoVault = v end
+})
+SurvivorTab:AddToggle({
+    Name = "Auto Pallet Drop",
+    Default = false,
+    Callback = function(v) _G.autoPallet = v end
+})
+SurvivorTab:AddToggle({
+    Name = "Auto Flashlight",
+    Default = false,
+    Callback = function(v) _G.autoFlashlight = v end
+})
+SurvivorTab:AddToggle({
+    Name = "Infinite Stamina",
+    Default = false,
+    Callback = function(v) _G.infiniteStamina = v end
+})
 
 -- Killer Tab
-local killerTab = window:addPage("Killer", "rbxassetid://4483345998")
-local killerSection = killerTab:addSection("Killer Settings")
-
-killerSection:addToggle("Anti Stun (Pallet)", false, function(v) _G.antiStun = v end)
+local KillerTab = Window:MakeTab({
+    Name = "Killer",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+KillerTab:AddToggle({
+    Name = "Anti Stun (Pallet)",
+    Default = false,
+    Callback = function(v) _G.antiStun = v end
+})
 
 -- Visuals Tab
-local visualTab = window:addPage("Visuals", "rbxassetid://4483345998")
-local visualSection = visualTab:addSection("ESP Settings")
-
-visualSection:addToggle("Player ESP", false, function(v) _G.playerESP = v end)
-visualSection:addToggle("Killer ESP", false, function(v) _G.killerESP = v end)
+local VisualTab = Window:MakeTab({
+    Name = "Visuals",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+VisualTab:AddToggle({
+    Name = "Player ESP",
+    Default = false,
+    Callback = function(v) _G.playerESP = v end
+})
+VisualTab:AddToggle({
+    Name = "Killer ESP",
+    Default = false,
+    Callback = function(v) _G.killerESP = v end
+})
 
 -- Utility Tab
-local utilityTab = window:addPage("Utility", "rbxassetid://4483345998")
-local utilitySection = utilityTab:addSection("Utility Settings")
-
-utilitySection:addToggle("Speed Boost", false, function(v)
-    _G.speedBoost = v
-    if not v then
-        local char = player.Character
-        if char then
-            local humanoid = char:FindFirstChild("Humanoid")
-            if humanoid then humanoid.WalkSpeed = 16 end
-        end
-    end
-end)
-
-utilitySection:addSlider("Speed Value", 16, 100, 16, 2, function(v) _G.speedValue = v end)
-
-utilitySection:addButton("Teleport to Nearest Generator", function()
-    local generators = {}
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        if obj.Name:lower():find("generator") then
-            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-            if part then table.insert(generators, part) end
-        end
-    end
-    local nearest, shortest = nil, math.huge
-    local root = getRootPart(player)
-    if root then
-        for _, gen in ipairs(generators) do
-            local dist = (root.Position - gen.Position).Magnitude
-            if dist < shortest then
-                shortest = dist
-                nearest = gen
+local UtilityTab = Window:MakeTab({
+    Name = "Utility",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+UtilityTab:AddToggle({
+    Name = "Speed Boost",
+    Default = false,
+    Callback = function(v)
+        _G.speedBoost = v
+        if not v then
+            local char = player.Character
+            if char then
+                local hum = char:FindFirstChild("Humanoid")
+                if hum then hum.WalkSpeed = 16 end
             end
         end
-        if nearest then
-            player.Character:SetPrimaryPartCFrame(CFrame.new(nearest.Position + Vector3.new(0, 5, 0)))
-            window:Notify("Teleported", "To nearest generator")
-        else
-            window:Notify("Error", "No generator found")
+    end
+})
+UtilityTab:AddSlider({
+    Name = "Speed Value",
+    Min = 16,
+    Max = 100,
+    Default = 16,
+    Increment = 2,
+    Callback = function(v) _G.speedValue = v end
+})
+UtilityTab:AddButton({
+    Name = "Teleport to Nearest Generator",
+    Callback = function()
+        local gens = {}
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name:lower():find("generator") then
+                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
+                if part then table.insert(gens, part) end
+            end
+        end
+        local nearest, distMin = nil, math.huge
+        local root = getRootPart(player)
+        if root then
+            for _, g in ipairs(gens) do
+                local d = (root.Position - g.Position).Magnitude
+                if d < distMin then
+                    distMin = d
+                    nearest = g
+                end
+            end
+            if nearest then
+                player.Character:SetPrimaryPartCFrame(CFrame.new(nearest.Position + Vector3.new(0,5,0)))
+                OrionLib:MakeNotification({Name = "Teleported", Content = "To nearest generator", Time = 2})
+            else
+                OrionLib:MakeNotification({Name = "Error", Content = "No generator found", Time = 2})
+            end
         end
     end
-end)
-
-utilitySection:addToggle("Anti-AFK", false, function(v)
-    if v then
-        _G.afkConnection = RunService.Heartbeat:Connect(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
-        end)
-        table.insert(connections, _G.afkConnection)
-    elseif _G.afkConnection then
-        _G.afkConnection:Disconnect()
-        _G.afkConnection = nil
+})
+UtilityTab:AddToggle({
+    Name = "Anti-AFK",
+    Default = false,
+    Callback = function(v)
+        if v then
+            _G.afkConn = RunService.Heartbeat:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+            table.insert(connections, _G.afkConn)
+        elseif _G.afkConn then
+            _G.afkConn:Disconnect()
+            _G.afkConn = nil
+        end
     end
-end)
+})
 
--- Finalize
-window:SelectPage(1) -- Pilih tab pertama
-window:Notify("GILONG Hub", "Script loaded successfully!")
-
--- Start main loop
+-- Inisialisasi
+OrionLib:Init()
 mainLoop()
 
--- Handle respawn
-player.CharacterAdded:Connect(function(newChar)
+player.CharacterAdded:Connect(function()
     wait(1)
     if _G.speedBoost then
-        local humanoid = newChar:WaitForChild("Humanoid")
-        humanoid.WalkSpeed = _G.speedValue
+        local hum = player.Character and player.Character:FindFirstChild("Humanoid")
+        if hum then hum.WalkSpeed = _G.speedValue end
     end
 end)
+
+OrionLib:MakeNotification({Name = "GILONG Hub", Content = "Script loaded successfully!", Time = 5})
