@@ -1,8 +1,100 @@
--- Violence District - GILONG Hub (WindUI)
+-- Violence District - GILONG Hub (WindUI dengan fallback)
 -- Fitur: Generator, Killer, Visuals, Utility (tanpa Survivor & tanpa notifikasi)
 
--- Load WindUI
-local WindUI = loadstring(game:HttpGet('https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/main.client.lua'))()
+-- ========== FUNGSI LOAD LIBRARY DENGAN FALLBACK ==========
+local function loadWindUI()
+    local urls = {
+        "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/main.client.lua",
+        "https://raw.githubusercontent.com/Footagesus/WindUI/main/main.client.lua",
+        "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/source.lua",
+        "https://raw.githubusercontent.com/Footagesus/WindUI/main/source.lua"
+    }
+    for _, url in ipairs(urls) do
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(url))()
+        end)
+        if success and result then
+            return result
+        end
+    end
+    return nil
+end
+
+local WindUI = loadWindUI()
+
+-- Jika WindUI gagal dimuat, buat UI sederhana
+if not WindUI then
+    warn("GILONG Hub: Gagal memuat WindUI. Membuat UI sederhana...")
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "GILONGHub_SimpleUI"
+    screenGui.Parent = game.CoreGui
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 300, 0, 400)
+    frame.Position = UDim2.new(0.5, -150, 0.5, -200)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 40)
+    title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    title.Text = "GILONG Hub (Simple)"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 20
+    title.Font = Enum.Font.GothamBold
+    title.Parent = frame
+    
+    local notice = Instance.new("TextLabel")
+    notice.Size = UDim2.new(1, -20, 0, 60)
+    notice.Position = UDim2.new(0, 10, 0, 50)
+    notice.BackgroundTransparency = 1
+    notice.Text = "WindUI gagal dimuat.\nScript tetap berjalan dengan UI minimal."
+    notice.TextColor3 = Color3.fromRGB(255, 255, 0)
+    notice.TextSize = 14
+    notice.TextWrapped = true
+    notice.Font = Enum.Font.Gotham
+    notice.Parent = frame
+    
+    local function createToggle(y, name, var)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.9, 0, 0, 35)
+        btn.Position = UDim2.new(0.05, 0, 0, y)
+        btn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+        btn.Text = name .. ": OFF"
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 14
+        btn.Parent = frame
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 5)
+        btnCorner.Parent = btn
+        
+        btn.MouseButton1Click:Connect(function()
+            _G[var] = not _G[var]
+            btn.Text = name .. ": " .. (_G[var] and "ON" or "OFF")
+            btn.BackgroundColor3 = _G[var] and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(80, 80, 80)
+        end)
+    end
+    
+    createToggle(120, "Anti-Fail", "antiFail")
+    createToggle(160, "Auto Perfect", "autoPerfect")
+    createToggle(200, "Generator ESP", "generatorESP")
+    createToggle(240, "Instant Repair", "instantRepair")
+    createToggle(280, "Player ESP", "playerESP")
+    createToggle(320, "Killer ESP", "killerESP")
+    createToggle(360, "Speed Boost", "speedBoost")
+    
+    -- Fallback UI tidak memiliki slider speed, tapi speed bisa diatur manual via _G.speedValue default 16
+end
 
 -- Services
 local Players = game:GetService("Players")
@@ -305,90 +397,87 @@ local function mainLoop()
     table.insert(connections, conn)
 end
 
--- Buat Window WindUI
-local Window = WindUI:CreateWindow({
-    Title = "GILONG Hub - Violence District",
-    Icon = "skull",
-    Author = "GILONG",
-    Folder = "GILONGHub",
-    Size = UDim2.fromOffset(600, 500),
-    Theme = "Dark",
-    Acrylic = false,
-    HideSearchBar = true,
-    SideBarWidth = 180,
-})
+-- Jika WindUI berhasil dimuat, buat window WindUI
+if WindUI then
+    local Window = WindUI:CreateWindow({
+        Title = "GILONG Hub - Violence District",
+        Icon = "skull",
+        Author = "GILONG",
+        Folder = "GILONGHub",
+        Size = UDim2.fromOffset(600, 500),
+        Theme = "Dark",
+        Acrylic = false,
+        HideSearchBar = true,
+        SideBarWidth = 180,
+    })
 
--- Tag versi
-Window:Tag({ Title = "v1.0", Color = Color3.fromHex("#30ff6a") })
+    Window:Tag({ Title = "v1.0", Color = Color3.fromHex("#30ff6a") })
 
--- Tab Generator
-local GeneratorTab = Window:Tab({ Title = "Generator", Icon = "zap" })
-local GenSection = GeneratorTab:Section({ Title = "Generator Settings", Opened = true })
-GenSection:Toggle({ Title = "Anti-Fail Generator", Value = false, Callback = function(v) _G.antiFail = v end })
-GenSection:Toggle({ Title = "Auto Perfect Skill Check", Value = false, Callback = function(v) _G.autoPerfect = v end })
-GenSection:Toggle({ Title = "Generator ESP", Value = false, Callback = function(v) _G.generatorESP = v end })
-GenSection:Toggle({ Title = "Instant Repair (Spam)", Value = false, Callback = function(v) _G.instantRepair = v end })
+    local GeneratorTab = Window:Tab({ Title = "Generator", Icon = "zap" })
+    local GenSection = GeneratorTab:Section({ Title = "Generator Settings", Opened = true })
+    GenSection:Toggle({ Title = "Anti-Fail Generator", Value = false, Callback = function(v) _G.antiFail = v end })
+    GenSection:Toggle({ Title = "Auto Perfect Skill Check", Value = false, Callback = function(v) _G.autoPerfect = v end })
+    GenSection:Toggle({ Title = "Generator ESP", Value = false, Callback = function(v) _G.generatorESP = v end })
+    GenSection:Toggle({ Title = "Instant Repair (Spam)", Value = false, Callback = function(v) _G.instantRepair = v end })
 
--- Tab Killer
-local KillerTab = Window:Tab({ Title = "Killer", Icon = "sword" })
-local KillerSection = KillerTab:Section({ Title = "Killer Settings", Opened = true })
-KillerSection:Toggle({ Title = "Anti Stun (Pallet)", Value = false, Callback = function(v) _G.antiStun = v end })
+    local KillerTab = Window:Tab({ Title = "Killer", Icon = "sword" })
+    local KillerSection = KillerTab:Section({ Title = "Killer Settings", Opened = true })
+    KillerSection:Toggle({ Title = "Anti Stun (Pallet)", Value = false, Callback = function(v) _G.antiStun = v end })
 
--- Tab Visuals
-local VisualsTab = Window:Tab({ Title = "Visuals", Icon = "eye" })
-local VisualSection = VisualsTab:Section({ Title = "ESP Settings", Opened = true })
-VisualSection:Toggle({ Title = "Player ESP", Value = false, Callback = function(v) _G.playerESP = v end })
-VisualSection:Toggle({ Title = "Killer ESP", Value = false, Callback = function(v) _G.killerESP = v end })
+    local VisualsTab = Window:Tab({ Title = "Visuals", Icon = "eye" })
+    local VisualSection = VisualsTab:Section({ Title = "ESP Settings", Opened = true })
+    VisualSection:Toggle({ Title = "Player ESP", Value = false, Callback = function(v) _G.playerESP = v end })
+    VisualSection:Toggle({ Title = "Killer ESP", Value = false, Callback = function(v) _G.killerESP = v end })
 
--- Tab Utility
-local UtilityTab = Window:Tab({ Title = "Utility", Icon = "settings" })
-local UtilSection = UtilityTab:Section({ Title = "Utility Settings", Opened = true })
-UtilSection:Toggle({ Title = "Speed Boost", Value = false, Callback = function(v)
-    _G.speedBoost = v
-    if not v then
-        local char = player.Character
-        if char then
-            local hum = char:FindFirstChild("Humanoid")
-            if hum then hum.WalkSpeed = 16 end
-        end
-    end
-end})
-UtilSection:Slider({ Title = "Speed Value", Value = { Min = 16, Max = 100, Default = 16 }, Callback = function(v) _G.speedValue = v end })
-UtilSection:Button({ Title = "Teleport to Nearest Generator", Callback = function()
-    local gens = {}
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.Name:lower():find("generator") then
-            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-            if part then table.insert(gens, part) end
-        end
-    end
-    local nearest, distMin = nil, math.huge
-    local root = getRootPart(player)
-    if root then
-        for _, g in ipairs(gens) do
-            local d = (root.Position - g.Position).Magnitude
-            if d < distMin then
-                distMin = d
-                nearest = g
+    local UtilityTab = Window:Tab({ Title = "Utility", Icon = "settings" })
+    local UtilSection = UtilityTab:Section({ Title = "Utility Settings", Opened = true })
+    UtilSection:Toggle({ Title = "Speed Boost", Value = false, Callback = function(v)
+        _G.speedBoost = v
+        if not v then
+            local char = player.Character
+            if char then
+                local hum = char:FindFirstChild("Humanoid")
+                if hum then hum.WalkSpeed = 16 end
             end
         end
-        if nearest then
-            player.Character:SetPrimaryPartCFrame(CFrame.new(nearest.Position + Vector3.new(0,5,0)))
+    end})
+    UtilSection:Slider({ Title = "Speed Value", Value = { Min = 16, Max = 100, Default = 16 }, Callback = function(v) _G.speedValue = v end })
+    UtilSection:Button({ Title = "Teleport to Nearest Generator", Callback = function()
+        local gens = {}
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name:lower():find("generator") then
+                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
+                if part then table.insert(gens, part) end
+            end
         end
-    end
-end})
-UtilSection:Toggle({ Title = "Anti-AFK", Value = false, Callback = function(v)
-    if v then
-        _G.afkConn = RunService.Heartbeat:Connect(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
-        end)
-        table.insert(connections, _G.afkConn)
-    elseif _G.afkConn then
-        _G.afkConn:Disconnect()
-        _G.afkConn = nil
-    end
-end})
+        local nearest, distMin = nil, math.huge
+        local root = getRootPart(player)
+        if root then
+            for _, g in ipairs(gens) do
+                local d = (root.Position - g.Position).Magnitude
+                if d < distMin then
+                    distMin = d
+                    nearest = g
+                end
+            end
+            if nearest then
+                player.Character:SetPrimaryPartCFrame(CFrame.new(nearest.Position + Vector3.new(0,5,0)))
+            end
+        end
+    end})
+    UtilSection:Toggle({ Title = "Anti-AFK", Value = false, Callback = function(v)
+        if v then
+            _G.afkConn = RunService.Heartbeat:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+            table.insert(connections, _G.afkConn)
+        elseif _G.afkConn then
+            _G.afkConn:Disconnect()
+            _G.afkConn = nil
+        end
+    end})
+end
 
 -- Mulai loop utama
 mainLoop()
