@@ -1,16 +1,8 @@
--- Violence District - GILONG Hub (Orion Library)
+-- Violence District - GILONG Hub (Orion Library) - Tanpa Notifikasi & Tanpa Pengecekan Load
 -- Dengan penanganan error dan fitur lengkap
 
--- Load Orion Library dengan pengecekan
+-- Load Orion Library
 local Orion = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
-if not Orion then
-    game.StarterGui:SetCore("SendNotification", {
-        Title = "GILONG Hub Error",
-        Text = "Gagal memuat Orion Library. Cek koneksi atau coba lagi.",
-        Duration = 5
-    })
-    return
-end
 
 -- Services
 local Players = game:GetService("Players")
@@ -25,16 +17,11 @@ local player = Players.LocalPlayer
 -- Global Variables
 _G.antiFail = false
 _G.autoPerfect = false
-_G.autoHeal = false
 _G.generatorESP = false
 _G.playerESP = false
 _G.killerESP = false
 _G.speedBoost = false
 _G.speedValue = 16
-_G.autoVault = false
-_G.autoPallet = false
-_G.autoFlashlight = false
-_G.infiniteStamina = false
 _G.instantRepair = false
 _G.antiStun = false
 
@@ -128,24 +115,6 @@ local function autoPerfectSkillCheck()
                         UserInputService:SimulateKeyPress(Enum.KeyCode.Space)
                     end
                 end
-            end
-        end
-    end
-end
-
--- Auto Heal
-local function autoHeal()
-    if not _G.autoHeal then return end
-    local char = player.Character
-    if not char then return end
-    local humanoid = char:FindFirstChild("Humanoid")
-    if humanoid and humanoid.Health < humanoid.MaxHealth then
-        fireRemote("ReplicatedStorage.Remotes.Healing.HealEvent", player)
-        fireRemote("ReplicatedStorage.Remotes.Healing.HealAnim")
-        for _, tool in ipairs(player.Backpack:GetChildren()) do
-            if tool:IsA("Tool") and (tool.Name:lower():find("medkit") or tool.Name:lower():find("bandage")) then
-                pcall(function() tool.Parent = char wait(0.2) tool:Activate() end)
-                break
             end
         end
     end
@@ -286,76 +255,6 @@ local function updateKillerESP()
     end
 end
 
--- Auto Vault
-local function autoVault()
-    if not _G.autoVault then return end
-    local root = getRootPart(player)
-    if not root then return end
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.Name:lower():find("window") or obj.Name:lower():find("vault") then
-            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-            if part and (root.Position - part.Position).Magnitude < 5 then
-                fireRemote("ReplicatedStorage.Remotes.Window.VaultEvent", part)
-                fireRemote("ReplicatedStorage.Remotes.Window.VaultAnim")
-                break
-            end
-        end
-    end
-end
-
--- Auto Pallet
-local function autoPallet()
-    if not _G.autoPallet then return end
-    local root = getRootPart(player)
-    if not root then return end
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.Name:lower():find("pallet") then
-            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildOfClass("BasePart")
-            if part and (root.Position - part.Position).Magnitude < 8 then
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr ~= player and plr.Character then
-                        local kRoot = getRootPart(plr)
-                        if kRoot and (root.Position - kRoot.Position).Magnitude < 15 then
-                            fireRemote("ReplicatedStorage.Remotes.Pallet.PalletDropEvent", part)
-                            fireRemote("ReplicatedStorage.Remotes.Pallet.PalletDropAnim")
-                            break
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
--- Auto Flashlight
-local function autoFlashlight()
-    if not _G.autoFlashlight then return end
-    local char = player.Character
-    if char then
-        for _, tool in ipairs(char:GetChildren()) do
-            if tool:IsA("Tool") and tool.Name:lower():find("flashlight") then
-                fireRemote("ReplicatedStorage.Remotes.Items.Flashlight.Activate", tool)
-                break
-            end
-        end
-    end
-end
-
--- Infinite Stamina
-local function infiniteStamina()
-    if not _G.infiniteStamina then return end
-    local char = player.Character
-    if char then
-        local stamina = char:FindFirstChild("Stamina")
-        if stamina and stamina:IsA("NumberValue") then
-            stamina.Value = 100
-        end
-        if char:GetAttribute("Stamina") then
-            char:SetAttribute("Stamina", char:GetAttribute("MaxStamina") or 100)
-        end
-    end
-end
-
 -- Instant Repair
 local function instantRepair()
     if not _G.instantRepair then return end
@@ -397,14 +296,9 @@ local function mainLoop()
         safeCall(setupAntiFail)
         safeCall(setupAntiStun)
         safeCall(autoPerfectSkillCheck)
-        safeCall(autoHeal)
         safeCall(updateGeneratorESP)
         safeCall(updatePlayerESP)
         safeCall(updateKillerESP)
-        safeCall(autoVault)
-        safeCall(autoPallet)
-        safeCall(autoFlashlight)
-        safeCall(infiniteStamina)
         safeCall(instantRepair)
         safeCall(updateSpeed)
     end)
@@ -445,38 +339,6 @@ GenTab:AddToggle({
     Name = "Instant Repair (Spam)",
     Default = false,
     Callback = function(v) _G.instantRepair = v end
-})
-
--- Survivor Tab
-local SurvivorTab = Window:MakeTab({
-    Name = "Survivor",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-SurvivorTab:AddToggle({
-    Name = "Auto Heal",
-    Default = false,
-    Callback = function(v) _G.autoHeal = v end
-})
-SurvivorTab:AddToggle({
-    Name = "Auto Vault",
-    Default = false,
-    Callback = function(v) _G.autoVault = v end
-})
-SurvivorTab:AddToggle({
-    Name = "Auto Pallet Drop",
-    Default = false,
-    Callback = function(v) _G.autoPallet = v end
-})
-SurvivorTab:AddToggle({
-    Name = "Auto Flashlight",
-    Default = false,
-    Callback = function(v) _G.autoFlashlight = v end
-})
-SurvivorTab:AddToggle({
-    Name = "Infinite Stamina",
-    Default = false,
-    Callback = function(v) _G.infiniteStamina = v end
 })
 
 -- Killer Tab
@@ -558,9 +420,9 @@ UtilityTab:AddButton({
             end
             if nearest then
                 player.Character:SetPrimaryPartCFrame(CFrame.new(nearest.Position + Vector3.new(0,5,0)))
-                OrionLib:MakeNotification({Name = "Teleported", Content = "To nearest generator", Time = 2})
+                -- Notifikasi dihapus
             else
-                OrionLib:MakeNotification({Name = "Error", Content = "No generator found", Time = 2})
+                -- Notifikasi dihapus
             end
         end
     end
@@ -593,5 +455,3 @@ player.CharacterAdded:Connect(function()
         if hum then hum.WalkSpeed = _G.speedValue end
     end
 end)
-
-OrionLib:MakeNotification({Name = "GILONG Hub", Content = "Script loaded successfully!", Time = 5})
