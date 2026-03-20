@@ -1,4 +1,10 @@
-local loader = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/main.client.lua"))
+-- Violence District - GILONG Hub (WindUI - Generator Only)
+-- Fitur hanya untuk Generator: Anti-Fail, Auto Perfect, ESP, Instant Repair
+
+-- ========== LOAD WINDUI (TANPA FALLBACK) ==========
+local loadSuccess, WindUI = pcall(function()
+    -- Ambil dan eksekusi loader WindUI dari URL yang diberikan
+    local loader = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/main.client.lua"))
     if loader then
         loader() -- Jalankan loader untuk mendefinisikan variabel global WindUI
         return getfenv().WindUI -- Ambil variabel WindUI dari environment setelah loader dijalankan
