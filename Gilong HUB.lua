@@ -1,29 +1,31 @@
--- Violence District - GILONG Hub (WindUI dengan fallback)
+-- Violence District - GILONG Hub (WindUI dengan fallback dan error handling)
 -- Fitur: Generator, Killer, Visuals, Utility (tanpa Survivor & tanpa notifikasi)
 
--- ========== FUNGSI LOAD LIBRARY DENGAN FALLBACK ==========
-local function loadWindUI()
-    local urls = {
-        "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/main.client.lua",
-        "https://raw.githubusercontent.com/Footagesus/WindUI/main/main.client.lua",
-        "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/source.lua",
-        "https://raw.githubusercontent.com/Footagesus/WindUI/main/source.lua"
-    }
-    for _, url in ipairs(urls) do
-        local success, result = pcall(function()
-            return loadstring(game:HttpGet(url))()
-        end)
-        if success and result then
-            return result
-        end
+-- ========== FUNGSI LOAD LIBRARY DENGAN PENGECEKAN KETAT ==========
+local WindUI = nil
+local loadSuccess = false
+
+-- Coba beberapa URL
+local urls = {
+    "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/main.client.lua",
+    "https://raw.githubusercontent.com/Footagesus/WindUI/main/main.client.lua",
+    "https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/source.lua",
+    "https://raw.githubusercontent.com/Footagesus/WindUI/main/source.lua"
+}
+
+for _, url in ipairs(urls) do
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if success and result then
+        WindUI = result
+        loadSuccess = true
+        break
     end
-    return nil
 end
 
-local WindUI = loadWindUI()
-
--- Jika WindUI gagal dimuat, buat UI sederhana
-if not WindUI then
+-- Jika semua gagal, buat UI sederhana
+if not loadSuccess then
     warn("GILONG Hub: Gagal memuat WindUI. Membuat UI sederhana...")
     
     local screenGui = Instance.new("ScreenGui")
@@ -397,8 +399,8 @@ local function mainLoop()
     table.insert(connections, conn)
 end
 
--- Jika WindUI berhasil dimuat, buat window WindUI
-if WindUI then
+-- Hanya buat window WindUI jika library berhasil dimuat
+if loadSuccess and WindUI then
     local Window = WindUI:CreateWindow({
         Title = "GILONG Hub - Violence District",
         Icon = "skull",
